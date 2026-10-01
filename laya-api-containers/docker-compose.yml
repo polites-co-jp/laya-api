@@ -1,0 +1,31 @@
+name: laya-api
+
+# ホスト公開ポートは Notion「ポート管理」で予約した 22300-22399 の範囲内に限る（docs/port-registry.md）
+services:
+  api:
+    build: ../apps/api
+    restart: unless-stopped
+    environment:
+      API_AUTH_SECRET: ${API_AUTH_SECRET:?API_AUTH_SECRET is required}
+      LAYA_AI_API_KEY: ${LAYA_AI_API_KEY:?LAYA_AI_API_KEY is required}
+      LAYA_BASE_URL: ${LAYA_BASE_URL:-https://laya-ai.pro/api}
+      AUTH_MAX_SKEW_MS: ${AUTH_MAX_SKEW_MS:-1000}
+      UPSTREAM_TIMEOUT_MS: ${UPSTREAM_TIMEOUT_MS:-30000}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    ports:
+      - "${API_HOST_BIND:-127.0.0.1}:${API_HOST_PORT:-22300}:8080"
+
+  # 開発用の動作確認チャット。profile "dev" のときだけ起動する
+  chat:
+    build: ../apps/chat
+    profiles: ["dev"]
+    restart: unless-stopped
+    environment:
+      API_AUTH_SECRET: ${API_AUTH_SECRET:?API_AUTH_SECRET is required}
+      LAYA_API_URL: http://api:8080
+    ports:
+      # チャットは署名を代行するため、ここに届く人は誰でも API を使える。ホスト外へ公開しない
+      - "127.0.0.1:${CHAT_HOST_PORT:-22301}:3000"
+    depends_on:
+      api:
+        condition: service_healthy
