@@ -74,6 +74,26 @@ export class LayaClient {
   }
 }
 
+const QUESTIONS_JA = {
+  urgent: { type: "noul", instructions: "今日中の対応が必要か？" },
+  queue: {
+    type: "choice",
+    instructions: "どの窓口が担当すべきか？",
+    criteria: { returns: "返品・破損", delivery: "配送状況", other: "その他" }
+  },
+  intensity: { type: "score", instructions: "どのくらい急ぎか？", criteria: ["Routine", "Soon", "Today", "Immediate"] }
+};
+
+const QUESTIONS_EN = {
+  urgent: { type: "noul", instructions: "Does this need a response today?" },
+  queue: {
+    type: "choice",
+    instructions: "Which team should handle this?",
+    criteria: { returns: "Returns or damaged items", delivery: "Delivery status", other: "Other" }
+  },
+  intensity: { type: "score", instructions: "How urgent is this?", criteria: ["Routine", "Soon", "Today", "Immediate"] }
+};
+
 async function main() {
   const secret = process.env.API_AUTH_SECRET;
   if (!secret) {
@@ -86,18 +106,9 @@ async function main() {
   console.log("GET /health", health.status, JSON.stringify(health.data));
 
   const state = process.argv[2] ?? "注文した商品が壊れて届きました。今日中に交換してほしいです。";
-  const res = await client.decide({
-    state,
-    questions: {
-      urgent: { type: "noul", instructions: "今日中の対応が必要か？" },
-      queue: {
-        type: "choice",
-        instructions: "どの窓口が担当すべきか？",
-        criteria: { returns: "返品・破損", delivery: "配送状況", other: "その他" }
-      },
-      intensity: { type: "score", instructions: "どのくらい急ぎか？", criteria: ["Routine", "Soon", "Today", "Immediate"] }
-    }
-  });
+  // Laya は state の言語でチェックポイントを選ぶ。english に日本語の質問が届かないよう、例題も state の言語に合わせる
+  const questions = /[぀-ヿ一-鿿]/.test(state) ? QUESTIONS_JA : QUESTIONS_EN;
+  const res = await client.decide({ state, questions });
   console.log("POST /v1/systemone", res.status, `inference ${res.inferenceMs} ms`);
   console.log(JSON.stringify(res.data, null, 2));
   if (res.status !== 200) process.exit(1);

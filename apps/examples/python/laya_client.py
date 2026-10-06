@@ -15,6 +15,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import secrets
 import sys
 import time
@@ -98,6 +99,35 @@ class LayaClient:
         return self.request("POST", "/v1/systemone/batch", payload)
 
 
+QUESTIONS_JA = {
+    "urgent": {"type": "noul", "instructions": "今日中の対応が必要か？"},
+    "queue": {
+        "type": "choice",
+        "instructions": "どの窓口が担当すべきか？",
+        "criteria": {"returns": "返品・破損", "delivery": "配送状況", "other": "その他"},
+    },
+    "intensity": {
+        "type": "score",
+        "instructions": "どのくらい急ぎか？",
+        "criteria": ["Routine", "Soon", "Today", "Immediate"],
+    },
+}
+
+QUESTIONS_EN = {
+    "urgent": {"type": "noul", "instructions": "Does this need a response today?"},
+    "queue": {
+        "type": "choice",
+        "instructions": "Which team should handle this?",
+        "criteria": {"returns": "Returns or damaged items", "delivery": "Delivery status", "other": "Other"},
+    },
+    "intensity": {
+        "type": "score",
+        "instructions": "How urgent is this?",
+        "criteria": ["Routine", "Soon", "Today", "Immediate"],
+    },
+}
+
+
 def main() -> int:
     secret = os.environ.get("API_AUTH_SECRET")
     if not secret:
@@ -109,24 +139,9 @@ def main() -> int:
     print("GET /health", health.status, json.dumps(health.data, ensure_ascii=False))
 
     state = sys.argv[1] if len(sys.argv) > 1 else "注文した商品が壊れて届きました。今日中に交換してほしいです。"
-    res = client.decide(
-        {
-            "state": state,
-            "questions": {
-                "urgent": {"type": "noul", "instructions": "今日中の対応が必要か？"},
-                "queue": {
-                    "type": "choice",
-                    "instructions": "どの窓口が担当すべきか？",
-                    "criteria": {"returns": "返品・破損", "delivery": "配送状況", "other": "その他"},
-                },
-                "intensity": {
-                    "type": "score",
-                    "instructions": "どのくらい急ぎか？",
-                    "criteria": ["Routine", "Soon", "Today", "Immediate"],
-                },
-            },
-        }
-    )
+    # Laya は state の言語でチェックポイントを選ぶ。english に日本語の質問が届かないよう、例題も state の言語に合わせる
+    questions = QUESTIONS_JA if re.search("[぀-ヿ一-鿿]", state) else QUESTIONS_EN
+    res = client.decide({"state": state, "questions": questions})
     print("POST /v1/systemone", res.status, f"inference {res.inference_ms} ms")
     print(json.dumps(res.data, ensure_ascii=False, indent=2))
     return 0 if res.status == 200 else 1
