@@ -45,6 +45,18 @@ COMPOSE_FILE=docker-compose.yml:docker-compose.cpu.yml
 判断1回あたりの目安は GPU で数十ms、CPU で0.2〜0.5秒。
 ドライバが 580 未満の GPU ホストでは `LAYA_TORCH_INDEX=cu128` と `LAYA_TORCH_VERSION=2.11.0` を設定する。
 
+### 開発時の起動（npm スクリプト）
+
+リポジトリのルートで実行する。laya と chat（と chat が依存する api）をフォアグラウンドで起動し、Ctrl+C で止まる。
+
+```sh
+npm run dev:gpu   # GPU で起動
+npm run dev:cpu   # CPU で起動
+```
+
+どちらも compose ファイルを `-f` で直接指定するので、`.env` の `COMPOSE_FILE` の設定より優先される。
+`.env`（`API_AUTH_SECRET`）は事前に用意しておく。
+
 ## エンドポイント
 
 laya-serve の全エンドポイントを同じ入出力のまま中継する。入出力の形式は [Laya の README](https://github.com/NandhaKishorM/laya) を参照。
