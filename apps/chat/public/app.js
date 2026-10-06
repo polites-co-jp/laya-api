@@ -23,12 +23,12 @@ const I18N = {
     noulCriteriaPlaceholder: "true の意味\nfalse の意味",
     hint: {
       noul: "任意。1行目に true の意味、2行目に false の意味を書きます（空欄なら criteria を送りません）",
-      choice: "1行に1つ「ラベル: 説明」で書きます（2〜255個）",
-      score: "1行に1つ、低い→高い順にラベルを書きます（2〜10個）"
+      choice: "1行に1つ「ラベル: 説明」で書きます（2〜100個）",
+      score: "1行に1つ、低い→高い順にラベルを書きます（2〜32個）"
     },
     errNoulCriteria: (id) => `${id}: noul の criteria は true と false の2行で書いてください`,
     errChoiceCount: (id) => `${id}: choice の選択肢は2つ以上必要です`,
-    errScoreCount: (id) => `${id}: score のラベルは2〜10個です`,
+    errScoreCount: (id) => `${id}: score のラベルは2〜32個です`,
     errNoQuestions: "質問を1つ以上追加してください",
     errBadId: (id) => `質問ID「${id}」は英数字と _ . - で64文字以内にしてください`,
     errDupId: (id) => `質問ID「${id}」が重複しています`,
@@ -67,12 +67,12 @@ const I18N = {
     noulCriteriaPlaceholder: "Meaning of true\nMeaning of false",
     hint: {
       noul: "Optional. Line 1 is the meaning of true, line 2 the meaning of false (leave empty to omit criteria)",
-      choice: "One \"label: description\" per line (2-255 options)",
-      score: "One label per line, from low to high (2-10 labels)"
+      choice: "One \"label: description\" per line (2-100 options)",
+      score: "One label per line, from low to high (2-32 labels)"
     },
     errNoulCriteria: (id) => `${id}: noul criteria needs two lines, true then false`,
     errChoiceCount: (id) => `${id}: choice needs at least two options`,
-    errScoreCount: (id) => `${id}: score needs 2-10 labels`,
+    errScoreCount: (id) => `${id}: score needs 2-32 labels`,
     errNoQuestions: "Add at least one question",
     errBadId: (id) => `Question ID "${id}" must be up to 64 characters of letters, digits, _ . -`,
     errDupId: (id) => `Question ID "${id}" is duplicated`,
@@ -196,7 +196,7 @@ function toLayaQuestion(q) {
       })
     );
   } else if (q.type === "score") {
-    if (ls.length < 2 || ls.length > 10) throw new Error(t().errScoreCount(q.id));
+    if (ls.length < 2 || ls.length > 32) throw new Error(t().errScoreCount(q.id));
     out.criteria = ls;
   }
   return out;
