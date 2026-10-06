@@ -7,30 +7,34 @@
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
+  <!-- 表示文言は app.js の I18N で差し替える。ここに書いた日本語は JS が動く前の初期表示 -->
   <header class="topbar">
-    <h1>Laya 判断チャット <span class="tag">dev</span></h1>
-    <div class="status" id="status" title="Laya /health">確認中…</div>
+    <h1><span data-i18n="title">Laya 判断チャット</span> <span class="tag">dev</span></h1>
+    <div class="topbar-right">
+      <div class="status" id="status" title="Laya /health" data-i18n="statusChecking">確認中…</div>
+      <button type="button" class="ghost small" id="lang" lang="en">English</button>
+    </div>
   </header>
 
   <main class="layout">
     <section class="chat">
       <div class="log" id="log" aria-live="polite">
-        <p class="empty" id="empty">右の欄で質問を決め、下の入力欄に判断させたい文章（state）を書いて送信します。</p>
+        <p class="empty" id="empty" data-i18n="empty">右の欄で質問を決め、下の入力欄に判断させたい文章（state）を書いて送信します。</p>
       </div>
       <form class="composer" id="composer">
-        <textarea id="state" rows="3" placeholder="判断対象の文章（state）。JSON を書くと JSON として送ります。Ctrl+Enter で送信" required></textarea>
-        <button type="submit" id="send">送信</button>
+        <textarea id="state" rows="3" data-i18n-placeholder="statePlaceholder" placeholder="判断対象の文章（state）。JSON を書くと JSON として送ります。Ctrl+Enter で送信" required></textarea>
+        <button type="submit" id="send" data-i18n="send">送信</button>
       </form>
     </section>
 
     <aside class="panel">
       <div class="field">
-        <label for="model">モデル</label>
+        <label for="model" data-i18n="model">モデル</label>
         <select id="model"></select>
       </div>
 
       <div class="panel-head">
-        <h2>質問</h2>
+        <h2 data-i18n="questions">質問</h2>
         <div class="row">
           <button type="button" class="ghost" data-add="noul">＋ noul</button>
           <button type="button" class="ghost" data-add="choice">＋ choice</button>
@@ -40,22 +44,22 @@
       <div id="questions"></div>
 
       <details class="meta">
-        <summary>メタデータ（任意）</summary>
+        <summary data-i18n="metadata">メタデータ（任意）</summary>
         <div class="field"><label for="session">session_id</label><input id="session" maxlength="256"></div>
         <div class="field"><label for="user">user</label><input id="user" maxlength="256"></div>
       </details>
-      <button type="button" class="ghost small" id="reset">質問を初期状態に戻す</button>
+      <button type="button" class="ghost small" id="reset" data-i18n="reset">質問を初期状態に戻す</button>
     </aside>
   </main>
 
   <template id="q-template">
     <div class="question">
       <div class="q-row">
-        <input class="q-id" placeholder="質問ID" maxlength="64" pattern="[A-Za-z0-9_.\-]+" required>
+        <input class="q-id" maxlength="64" pattern="[A-Za-z0-9_.\-]+" required>
         <span class="q-type"></span>
-        <button type="button" class="icon q-remove" title="削除">×</button>
+        <button type="button" class="icon q-remove">×</button>
       </div>
-      <textarea class="q-instructions" rows="2" placeholder="instructions（何を判断させるか）" required></textarea>
+      <textarea class="q-instructions" rows="2" required></textarea>
       <textarea class="q-criteria" rows="3"></textarea>
       <p class="hint q-hint"></p>
     </div>

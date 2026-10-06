@@ -46,6 +46,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
   padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--surface);
 }
 .topbar h1 { font-size: 16px; margin: 0; }
+.topbar-right { display: flex; align-items: center; gap: 12px; }
 .tag { font-size: 11px; border: 1px solid var(--border); border-radius: 4px; padding: 0 6px; color: var(--muted); }
 .status { font-size: 12px; color: var(--muted); }
 .status.ok::before { content: "● "; color: var(--ok); }

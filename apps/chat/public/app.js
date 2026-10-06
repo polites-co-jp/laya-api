@@ -1,31 +1,115 @@
 "use strict";
 
 const STORAGE_KEY = "laya-chat.v2";
+const LANG_KEY = "laya-chat.lang";
+
+/** 画面の文言。index.html の data-i18n / data-i18n-placeholder がキーを参照する */
+const I18N = {
+  ja: {
+    title: "Laya 判断チャット",
+    switchTo: "English",
+    statusChecking: "確認中…",
+    empty: "右の欄で質問を決め、下の入力欄に判断させたい文章（state）を書いて送信します。",
+    statePlaceholder: "判断対象の文章（state）。JSON を書くと JSON として送ります。Ctrl+Enter で送信",
+    send: "送信",
+    model: "モデル",
+    modelAuto: "自動（言語で振り分け）",
+    questions: "質問",
+    metadata: "メタデータ（任意）",
+    reset: "質問を初期状態に戻す",
+    qIdPlaceholder: "質問ID",
+    qInstructionsPlaceholder: "instructions（何を判断させるか）",
+    qRemove: "削除",
+    noulCriteriaPlaceholder: "true の意味\nfalse の意味",
+    hint: {
+      noul: "任意。1行目に true の意味、2行目に false の意味を書きます（空欄なら criteria を送りません）",
+      choice: "1行に1つ「ラベル: 説明」で書きます（2〜255個）",
+      score: "1行に1つ、低い→高い順にラベルを書きます（2〜10個）"
+    },
+    errNoulCriteria: (id) => `${id}: noul の criteria は true と false の2行で書いてください`,
+    errChoiceCount: (id) => `${id}: choice の選択肢は2つ以上必要です`,
+    errScoreCount: (id) => `${id}: score のラベルは2〜10個です`,
+    errNoQuestions: "質問を1つ以上追加してください",
+    errBadId: (id) => `質問ID「${id}」は英数字と _ . - で64文字以内にしてください`,
+    errDupId: (id) => `質問ID「${id}」が重複しています`,
+    errNoInstructions: (id) => `${id}: instructions が空です`,
+    yes: "はい",
+    no: "いいえ",
+    trueProbability: "true の確率",
+    error: "エラー",
+    rawJson: "生のJSON",
+    inference: "推論",
+    sendFailed: "送信に失敗しました",
+    notLoaded: "未ロード",
+    layaUnreachable: "Laya に接続できません（起動中かもしれません）",
+    apiUnreachable: "API に接続できません",
+    defaultQuestions: [
+      { id: "urgent", type: "noul", instructions: "今日中の対応が必要か？", criteria: "当日中の返信が必要\n通常の順番で問題ない" },
+      { id: "queue", type: "choice", instructions: "どの窓口が担当すべきか？", criteria: "returns: 返品・破損\ndelivery: 配送状況\nother: その他" },
+      { id: "intensity", type: "score", instructions: "どのくらい急ぎか？", criteria: "Routine\nSoon\nToday\nImmediate" }
+    ]
+  },
+  en: {
+    title: "Laya Decision Chat",
+    switchTo: "日本語",
+    statusChecking: "Checking…",
+    empty: "Set up questions in the right panel, then type the text to judge (state) below and send it.",
+    statePlaceholder: "Text to judge (state). JSON is sent as JSON. Ctrl+Enter to send",
+    send: "Send",
+    model: "Model",
+    modelAuto: "Auto (route by language)",
+    questions: "Questions",
+    metadata: "Metadata (optional)",
+    reset: "Reset questions to defaults",
+    qIdPlaceholder: "Question ID",
+    qInstructionsPlaceholder: "instructions (what to decide)",
+    qRemove: "Remove",
+    noulCriteriaPlaceholder: "Meaning of true\nMeaning of false",
+    hint: {
+      noul: "Optional. Line 1 is the meaning of true, line 2 the meaning of false (leave empty to omit criteria)",
+      choice: "One \"label: description\" per line (2-255 options)",
+      score: "One label per line, from low to high (2-10 labels)"
+    },
+    errNoulCriteria: (id) => `${id}: noul criteria needs two lines, true then false`,
+    errChoiceCount: (id) => `${id}: choice needs at least two options`,
+    errScoreCount: (id) => `${id}: score needs 2-10 labels`,
+    errNoQuestions: "Add at least one question",
+    errBadId: (id) => `Question ID "${id}" must be up to 64 characters of letters, digits, _ . -`,
+    errDupId: (id) => `Question ID "${id}" is duplicated`,
+    errNoInstructions: (id) => `${id}: instructions is empty`,
+    yes: "Yes",
+    no: "No",
+    trueProbability: "P(true)",
+    error: "Error",
+    rawJson: "Raw JSON",
+    inference: "inference",
+    sendFailed: "Failed to send",
+    notLoaded: "not loaded",
+    layaUnreachable: "Cannot reach Laya (it may still be starting)",
+    apiUnreachable: "Cannot reach the API",
+    defaultQuestions: [
+      { id: "urgent", type: "noul", instructions: "Does this need a response today?", criteria: "A same-day reply is needed\nThe normal queue is fine" },
+      { id: "queue", type: "choice", instructions: "Which team should handle this?", criteria: "returns: Returns or damaged items\ndelivery: Delivery status\nother: Other" },
+      { id: "intensity", type: "score", instructions: "How urgent is this?", criteria: "Routine\nSoon\nToday\nImmediate" }
+    ]
+  }
+};
+
+function initialLang() {
+  try {
+    const saved = localStorage.getItem(LANG_KEY);
+    if (saved && saved in I18N) return saved;
+  } catch { /* noop */ }
+  return (navigator.language ?? "").toLowerCase().startsWith("ja") ? "ja" : "en";
+}
+
+let lang = initialLang();
+const t = () => I18N[lang];
 
 /** laya-serve が持つチェックポイント。空文字は「言語を見て自動で振り分け」 */
-const MODELS = [
-  ["", "自動（言語で振り分け）"],
-  ["english", "english"],
-  ["multilingual", "multilingual"],
-  ["typed-decisions", "typed-decisions"]
-];
+const MODELS = ["", "english", "multilingual", "typed-decisions"];
 
-const CRITERIA_HINT = {
-  noul: "任意。1行目に true の意味、2行目に false の意味を書きます（空欄なら criteria を送りません）",
-  choice: "1行に1つ「ラベル: 説明」で書きます（2〜255個）",
-  score: "1行に1つ、低い→高い順にラベルを書きます（2〜10個）"
-};
-
-const DEFAULT_STATE = {
-  model: "",
-  session: "",
-  user: "",
-  questions: [
-    { id: "urgent", type: "noul", instructions: "今日中の対応が必要か？", criteria: "当日中の返信が必要\n通常の順番で問題ない" },
-    { id: "queue", type: "choice", instructions: "どの窓口が担当すべきか？", criteria: "returns: 返品・破損\ndelivery: 配送状況\nother: その他" },
-    { id: "intensity", type: "score", instructions: "どのくらい急ぎか？", criteria: "Routine\nSoon\nToday\nImmediate" }
-  ]
-};
+const defaultState = () => ({ model: "", session: "", user: "", questions: structuredClone(t().defaultQuestions) });
 
 const $ = (sel) => document.querySelector(sel);
 const log = $("#log");
@@ -35,9 +119,9 @@ const modelEl = $("#model");
 function load() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return { ...structuredClone(DEFAULT_STATE), ...JSON.parse(raw) };
+    if (raw) return { ...defaultState(), ...JSON.parse(raw) };
   } catch { /* 保存領域が使えなくても既定値で動かす */ }
-  return structuredClone(DEFAULT_STATE);
+  return defaultState();
 }
 
 function save() {
@@ -55,14 +139,21 @@ function renderQuestions() {
 function questionNode(q) {
   const node = $("#q-template").content.firstElementChild.cloneNode(true);
   node.dataset.type = q.type;
-  node.querySelector(".q-id").value = q.id;
+  const id = node.querySelector(".q-id");
+  id.value = q.id;
+  id.placeholder = t().qIdPlaceholder;
   node.querySelector(".q-type").textContent = q.type;
-  node.querySelector(".q-instructions").value = q.instructions;
+  const instructions = node.querySelector(".q-instructions");
+  instructions.value = q.instructions;
+  instructions.placeholder = t().qInstructionsPlaceholder;
   const criteria = node.querySelector(".q-criteria");
   criteria.value = q.criteria;
-  criteria.placeholder = q.type === "noul" ? "true の意味\nfalse の意味" : "criteria";
-  node.querySelector(".q-hint").textContent = CRITERIA_HINT[q.type];
-  node.querySelector(".q-remove").addEventListener("click", () => {
+  criteria.placeholder = q.type === "noul" ? t().noulCriteriaPlaceholder : "criteria";
+  node.querySelector(".q-hint").textContent = t().hint[q.type];
+  const remove = node.querySelector(".q-remove");
+  remove.title = t().qRemove;
+  remove.setAttribute("aria-label", t().qRemove);
+  remove.addEventListener("click", () => {
     state = collect();
     state.questions = state.questions.filter((_, i) => i !== [...questionsEl.children].indexOf(node));
     renderQuestions();
@@ -95,9 +186,9 @@ function toLayaQuestion(q) {
   const ls = lines(q.criteria);
   if (q.type === "noul") {
     if (ls.length >= 2) out.criteria = { true: ls[0], false: ls[1] };
-    else if (ls.length === 1) throw new Error(`${q.id}: noul の criteria は true と false の2行で書いてください`);
+    else if (ls.length === 1) throw new Error(t().errNoulCriteria(q.id));
   } else if (q.type === "choice") {
-    if (ls.length < 2) throw new Error(`${q.id}: choice の選択肢は2つ以上必要です`);
+    if (ls.length < 2) throw new Error(t().errChoiceCount(q.id));
     out.criteria = Object.fromEntries(
       ls.map((l) => {
         const i = l.indexOf(":");
@@ -105,7 +196,7 @@ function toLayaQuestion(q) {
       })
     );
   } else if (q.type === "score") {
-    if (ls.length < 2 || ls.length > 10) throw new Error(`${q.id}: score のラベルは2〜10個です`);
+    if (ls.length < 2 || ls.length > 10) throw new Error(t().errScoreCount(q.id));
     out.criteria = ls;
   }
   return out;
@@ -113,12 +204,12 @@ function toLayaQuestion(q) {
 
 function buildRequest(text) {
   const s = collect();
-  if (s.questions.length === 0) throw new Error("質問を1つ以上追加してください");
+  if (s.questions.length === 0) throw new Error(t().errNoQuestions);
   const questions = {};
   for (const q of s.questions) {
-    if (!/^[A-Za-z0-9_.-]{1,64}$/.test(q.id)) throw new Error(`質問ID「${q.id}」は英数字と _ . - で64文字以内にしてください`);
-    if (questions[q.id]) throw new Error(`質問ID「${q.id}」が重複しています`);
-    if (!q.instructions) throw new Error(`${q.id}: instructions が空です`);
+    if (!/^[A-Za-z0-9_.-]{1,64}$/.test(q.id)) throw new Error(t().errBadId(q.id));
+    if (questions[q.id]) throw new Error(t().errDupId(q.id));
+    if (!q.instructions) throw new Error(t().errNoInstructions(q.id));
     questions[q.id] = toLayaQuestion(q);
   }
   let parsedState = text;
@@ -175,7 +266,7 @@ function answerNode(id, a) {
   if (a.type === "noul" || typeof a.noul === "number") {
     const p = Number(a.noul);
     return el("div", { class: "answer" }, head,
-      el("div", { class: "value" }, p >= 0.5 ? "はい" : "いいえ", el("span", { class: "conf" }, `true の確率 ${pct(p)}`)),
+      el("div", { class: "value" }, p >= 0.5 ? t().yes : t().no, el("span", { class: "conf" }, `${t().trueProbability} ${pct(p)}`)),
       bars({ true: p, false: 1 - p }, p >= 0.5 ? "true" : "false"));
   }
   if (a.type === "score" || "score" in a) {
@@ -196,14 +287,14 @@ function responseNode(status, body, headers, ms) {
   if (status < 400 && body && body.answers) {
     for (const [id, a] of Object.entries(body.answers)) box.append(answerNode(id, a));
   } else {
-    box.append(el("div", { class: "value" }, `エラー ${status}`), el("pre", {}, JSON.stringify(body, null, 2)));
+    box.append(el("div", { class: "value" }, `${t().error} ${status}`), el("pre", {}, JSON.stringify(body, null, 2)));
   }
   const meta = [`${ms} ms`];
   if (body && body.routing && body.routing.model) meta.unshift(`model: ${body.routing.model}`);
   if (body && body.usage) meta.push(`input ${body.usage.input_tokens ?? "?"} / output ${body.usage.output_tokens ?? "?"} tokens`);
   for (const [k, v] of Object.entries(headers)) meta.push(`${k}: ${v}`);
   box.append(el("div", { class: "meta-line" }, meta.join(" ・ ")));
-  box.append(el("details", {}, el("summary", { class: "meta-line" }, "生のJSON"), el("pre", {}, JSON.stringify(body, null, 2))));
+  box.append(el("details", {}, el("summary", { class: "meta-line" }, t().rawJson), el("pre", {}, JSON.stringify(body, null, 2))));
   return box;
 }
 
@@ -227,7 +318,7 @@ async function send(text) {
   const ms = Math.round(performance.now() - started);
   const headers = {};
   const inference = res.headers.get("x-inference-time-ms");
-  if (inference) headers["推論"] = `${inference} ms`;
+  if (inference) headers[t().inference] = `${inference} ms`;
   const retry = res.headers.get("retry-after");
   if (retry) headers["retry-after"] = retry;
   const raw = await res.text();
@@ -237,36 +328,75 @@ async function send(text) {
 }
 
 function renderModels() {
-  modelEl.replaceChildren(...MODELS.map(([value, label]) => el("option", { value }, label)));
-  modelEl.value = MODELS.some(([v]) => v === state.model) ? state.model : "";
+  modelEl.replaceChildren(...MODELS.map((value) => el("option", { value }, value || t().modelAuto)));
+  modelEl.value = MODELS.includes(state.model) ? state.model : "";
+}
+
+/** 直近の /health の結果。言語を切り替えたときに表示し直す */
+let health;
+
+function renderStatus() {
+  const s = $("#status");
+  if (!health) {
+    s.className = "status";
+    s.textContent = t().statusChecking;
+  } else if (health.ok) {
+    s.className = "status ok";
+    const loaded = (health.data.loaded ?? []).join(", ") || t().notLoaded;
+    s.textContent = `Laya ready ・ ${health.data.device ?? "?"} ・ ${loaded}`;
+  } else {
+    s.className = "status ng";
+    s.textContent = health.status === 502 ? t().layaUnreachable : health.status ? `API ${health.status}` : t().apiUnreachable;
+  }
 }
 
 async function loadStatus() {
-  const s = $("#status");
   try {
     const res = await fetch("/api/health");
     const data = await res.json().catch(() => ({}));
-    if (res.ok && data.status === "ok") {
-      s.className = "status ok";
-      const loaded = (data.loaded ?? []).join(", ") || "未ロード";
-      s.textContent = `Laya ready ・ ${data.device ?? "?"} ・ ${loaded}`;
-    } else {
-      s.className = "status ng";
-      s.textContent = res.status === 502 ? "Laya に接続できません（起動中かもしれません）" : `API ${res.status}`;
-    }
+    health = { ok: res.ok && data.status === "ok", status: res.status, data };
   } catch {
-    s.className = "status ng";
-    s.textContent = "API に接続できません";
+    health = { ok: false, status: 0, data: {} };
   }
+  renderStatus();
+}
+
+function renderStatic() {
+  document.documentElement.lang = lang;
+  document.title = t().title;
+  document.querySelectorAll("[data-i18n]").forEach((n) => (n.textContent = t()[n.dataset.i18n]));
+  document.querySelectorAll("[data-i18n-placeholder]").forEach((n) => (n.placeholder = t()[n.dataset.i18nPlaceholder]));
+  const btn = $("#lang");
+  btn.textContent = t().switchTo;
+  btn.lang = lang === "ja" ? "en" : "ja";
+}
+
+function setLang(next) {
+  const prev = lang;
+  state = collect();
+  // 質問が既定の例題のままなら、例題も切り替え先の言語にする
+  if (JSON.stringify(state.questions) === JSON.stringify(I18N[prev].defaultQuestions)) {
+    state.questions = structuredClone(I18N[next].defaultQuestions);
+  }
+  lang = next;
+  try { localStorage.setItem(LANG_KEY, lang); } catch { /* noop */ }
+  renderStatic();
+  renderQuestions();
+  renderModels();
+  renderStatus();
+  save();
 }
 
 // ---------- 起動 ----------
 
 $("#session").value = state.session;
 $("#user").value = state.user;
+renderStatic();
 renderQuestions();
 renderModels();
 loadStatus();
+
+$("#lang").addEventListener("click", () => setLang(lang === "ja" ? "en" : "ja"));
 
 modelEl.addEventListener("change", save);
 $("#session").addEventListener("input", save);
@@ -283,7 +413,7 @@ document.querySelectorAll("[data-add]").forEach((b) =>
 );
 
 $("#reset").addEventListener("click", () => {
-  state = { ...collect(), questions: structuredClone(DEFAULT_STATE.questions) };
+  state = { ...collect(), questions: structuredClone(t().defaultQuestions) };
   renderQuestions();
   save();
 });
@@ -299,7 +429,7 @@ $("#composer").addEventListener("submit", async (e) => {
     await send(text);
     input.value = "";
   } catch (err) {
-    push(el("div", { class: "msg bot error" }, `送信に失敗しました: ${err.message}`));
+    push(el("div", { class: "msg bot error" }, `${t().sendFailed}: ${err.message}`));
   } finally {
     btn.disabled = false;
     input.focus();
