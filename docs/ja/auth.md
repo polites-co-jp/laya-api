@@ -1,7 +1,11 @@
 # 認証仕様（HMAC 署名 + nonce）
 
-laya-api へのリクエストは、呼び出し側と API が共有する秘密鍵 `API_AUTH_SECRET` で署名する。
+**日本語** | [English](../en/auth.md) ・ [← README](../../README.md)
+
+API（既定 `http://127.0.0.1:22300`）へのリクエストは、呼び出し側と API が共有する秘密鍵 `API_AUTH_SECRET` で署名する。
 秘密鍵そのものは通信に載らないため、通信を傍受されても鍵は漏れない。
+
+署名を自分で実装せずに済ませたい場合は、[API 利用手順](api.md) のサンプルクライアント（Node.js / Python）をそのまま使える。
 
 ## 守れること
 
@@ -38,6 +42,7 @@ v1
 ```
 
 本文は送るバイト列そのものをハッシュする。署名後に JSON を整形し直したり再シリアライズしたりしない。
+日本語などを含む本文は UTF-8 のバイト列としてハッシュし、同じバイト列を送る。
 
 ## 検証の順序（API 側）
 
@@ -46,7 +51,7 @@ v1
 3. 時刻が API の現在時刻 ±`AUTH_MAX_SKEW_MS`（既定1000）以内であること
 4. nonce が未使用であること（許容幅の2倍の時間だけ記憶する）
 
-失敗した場合は理由を問わず `401 {"error":"unauthorized"}` を返す。理由は API のログにだけ出す。
+失敗した場合は理由を問わず `401 {"error":"unauthorized"}` を返す。理由は API のログにだけ出す（[API 利用手順のトラブルシューティング](api.md#トラブルシューティング)）。
 署名が正しくないリクエストでは nonce を消費しない。
 
 ## 運用上の注意
@@ -54,36 +59,35 @@ v1
 - 許容幅が1秒なので、呼び出し側と API のホストは NTP で時刻を合わせておく。ずれる環境では `AUTH_MAX_SKEW_MS` を広げる。
 - nonce の記憶は API プロセスのメモリ上にある。API を複数台に増やす場合は共有ストア（Redis 等）へ移す必要がある。
 - 鍵を変えるときは API と呼び出し側の `API_AUTH_SECRET` を同時に差し替える。
+- 鍵をブラウザの JavaScript に埋め込まない。署名はサーバ側で行う。
 
-## 実装例（Node.js）
+## 実装例
 
-参照実装は [apps/chat/src/layaClient.ts](../apps/chat/src/layaClient.ts)。そのまま持ち込んで使える。
+| 言語 | ファイル |
+|---|---|
+| Node.js（依存なし） | [apps/examples/node/laya_client.mjs](../../apps/examples/node/laya_client.mjs) |
+| Python（標準ライブラリのみ） | [apps/examples/python/laya_client.py](../../apps/examples/python/laya_client.py) |
+| TypeScript（チャットが使う参照実装） | [apps/chat/src/layaClient.ts](../../apps/chat/src/layaClient.ts) |
 
-```ts
-import { LayaApiClient } from "./layaClient.js";
+### curl + openssl
 
-const client = new LayaApiClient("http://127.0.0.1:22300", process.env.API_AUTH_SECRET!);
-const res = await client.request(
-  "POST",
-  "/v1/systemone",
-  JSON.stringify({
-    model: "multilingual",
-    state: "注文した商品が壊れていた。今日中に交換してほしい",
-    questions: {
-      urgent: { type: "noul", instructions: "今日中の対応が必要か？" }
-    }
-  })
-);
-console.log(res.status, await res.json());
-```
-
-## 実装例（curl + openssl）
+本文はファイルに書き、そのファイルのハッシュを取って `--data-binary @ファイル` で送る。
+`--data "$BODY"` で送ると、Windows の Git Bash では日本語が別の文字コードで curl に渡り、署名と本文がずれて 401 になる。
 
 ```sh
-SECRET=...; BODY='{"state":"hello","questions":{"q":{"type":"noul","instructions":"挨拶か？"}}}'
-TS=$(date +%s%3N); NONCE=$(openssl rand -hex 16)
-HASH=$(printf '%s' "$BODY" | openssl dgst -sha256 -hex | awk '{print $NF}')
-SIG=$(printf 'v1\n%s\n%s\nPOST\n/v1/systemone\n%s' "$TS" "$NONCE" "$HASH" | openssl dgst -sha256 -hmac "$SECRET" -hex | awk '{print $NF}')
+SECRET='（.env の API_AUTH_SECRET）'
+printf '%s' '{"state":"こんにちは","questions":{"q":{"type":"noul","instructions":"挨拶か？"}}}' > body.json
+
+HASH=$(openssl dgst -sha256 -hex body.json | awk '{print $NF}')
+NONCE=$(openssl rand -hex 16)
+TS=$(date +%s%3N)   # macOS では TS=$(perl -MTime::HiRes=time -e 'printf "%d", time*1000')
+SIG=$(printf 'v1\n%s\n%s\nPOST\n/v1/systemone\n%s' "$TS" "$NONCE" "$HASH" \
+  | openssl dgst -sha256 -hmac "$SECRET" -hex | awk '{print $NF}')
+
 curl -s http://127.0.0.1:22300/v1/systemone -H 'content-type: application/json' \
-  -H "x-auth-timestamp: $TS" -H "x-auth-nonce: $NONCE" -H "x-auth-signature: $SIG" --data "$BODY"
+  -H "x-auth-timestamp: $TS" -H "x-auth-nonce: $NONCE" -H "x-auth-signature: $SIG" \
+  --data-binary @body.json
 ```
+
+許容幅は1秒なので、`TS` は署名の直前に作り、curl まで間を空けずに実行する（まとめて貼り付けて実行する）。
+Windows では openssl の起動に時間がかかり、`TS` を先に作ると送信までに1秒を超えて 401（ログ上は `expired`）になることがある。

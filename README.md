@@ -1,94 +1,70 @@
-# laya-api
+# Laya 検証のための Docker コンテナ
 
-オープンソースの判断用AI [Laya](https://github.com/NandhaKishorM/laya)（Apache 2.0）をローカルで動かし、社内サービスから使うための API。
-Laya 本体（公式パッケージ `laya[serve]` の `laya-serve`）はコンテナ内のネットワークに閉じ、
-外から届くのは共有秘密鍵の HMAC 署名で認証する Node.js の API だけにしている。
+**日本語** | [English](README.en.md)
 
-## 構成
+オープンソースの判断モデル [Laya](https://github.com/NandhaKishorM/laya)（Apache-2.0）を手元の Docker で動かし、試すためのコンテナ一式。
+Laya 本体（公式パッケージ `laya[serve]` の `laya-serve`）に、署名で認証する API と、ブラウザで試せる判断チャットを組み合わせている。
 
-| パス | 内容 |
+> [!NOTE]
+> このリポジトリは Laya の作者・公式プロジェクトとは関係のない、非公式の検証環境です。
+
+![判断チャットの画面](docs/images/chat-ja.png)
+
+## できること
+
+- `docker compose up` 1回で Laya を起動する（既定は NVIDIA GPU。CPU にも切り替えられる）
+- ブラウザの判断チャットで、文章と質問（はい/いいえ・選択・段階評価）を入れて Laya の判断を確かめる
+- 外部のアプリケーションから、HMAC 署名付きの HTTP API として Laya を呼ぶ
+
+## ドキュメント
+
+| ドキュメント | 内容 |
 |---|---|
-| `apps/laya` | Laya 本体のイメージ（`laya[serve]==0.3.28`、torch は CUDA 版と CPU 版を切り替え） |
-| `apps/api` | 署名を検証して Laya へ中継する API（Node.js / Fastify / TypeScript） |
-| `apps/chat` | 開発用の動作確認チャット（判断チャット UI）。呼び出し側クライアントの参照実装 `src/layaClient.ts` を含む |
-| `docs/` | 認証仕様 [auth.md](docs/auth.md)、決定事項 [decisions.md](docs/decisions.md)、ポート台帳の写し [port-registry.md](docs/port-registry.md) |
-| `laya-api-containers/` | docker compose 一式 |
+| [Docker コンテナ展開手順](docs/ja/deploy.md) | 前提、起動、GPU と CPU の切り替え、停止と更新、設定一覧、トラブルシューティング |
+| [チャットの使い方](docs/ja/chat.md) | 画面の構成、質問の作り方、結果の読み方 |
+| [API 利用手順（外部アプリから使う）](docs/ja/api.md) | サンプルクライアント（Node.js / Python）、エンドポイント、リクエストと応答の形式、エラー |
+| [認証仕様](docs/ja/auth.md) | HMAC 署名 + nonce の仕様と、curl での呼び方 |
 
-## 起動
+開発記録（日本語のみ）: [決定事項](docs/decisions.md) ・ [ポート台帳](docs/port-registry.md)
+
+## クイックスタート
+
+Docker（Compose v2.24 以上）があればよい。GPU がないときは [展開手順の3](docs/ja/deploy.md#3-gpu-か-cpu-かを決める) で CPU に切り替えてから起動する。
 
 ```sh
-cd laya-api-containers
+git clone https://github.com/polites-co-jp/laya-api.git
+cd laya-api/laya-api-containers
 cp .env.example .env
-# API_AUTH_SECRET を埋める
+# .env の API_AUTH_SECRET に32文字以上のランダムな文字列を入れる（例: openssl rand -base64 32）
 docker compose up -d --build
 ```
 
-- API: `http://127.0.0.1:22300`
-- チャット（`COMPOSE_PROFILES=dev` のときだけ起動）: `http://127.0.0.1:22301`
+| 開くもの | URL |
+|---|---|
+| 判断チャット | <http://127.0.0.1:22301> |
+| API | <http://127.0.0.1:22300> |
 
-初回起動時は Laya の重み（english と multilingual で約1.5GB）を Hugging Face から取得するため、使えるようになるまで数分かかる。
-重みは名前付きボリューム `model-cache` に残るので、2回目以降は取得しない。
+初回は Laya の重み（約1.5GB）を Hugging Face から取得するため、使えるようになるまで数分かかる。
 
-本番では `.env` から `COMPOSE_PROFILES=dev` を消し、チャットを起動しない。
-別ホストのサービスから呼ぶときは `API_HOST_BIND=0.0.0.0` にし、TLS 終端（リバースプロキシ）を前段に置く。
+## 構成
 
-### GPU と CPU
-
-既定は NVIDIA GPU で動く。ホストに NVIDIA ドライバ 580 以上と NVIDIA Container Toolkit が要る。
-CPU で動かすときは `.env` の次の2行のコメントを外し、`docker compose up -d --build` する。
-
-```sh
-COMPOSE_PATH_SEPARATOR=:
-COMPOSE_FILE=docker-compose.yml:docker-compose.cpu.yml
+```
+ブラウザ ──> chat :22301 ──(署名して中継)──┐
+外部アプリ ──(HMAC 署名)────────────────> api :22300 ──> laya :8000（ホストには非公開）
 ```
 
-判断1回あたりの目安は GPU で数十ms、CPU で0.2〜0.5秒。
-ドライバが 580 未満の GPU ホストでは `LAYA_TORCH_INDEX=cu128` と `LAYA_TORCH_VERSION=2.11.0` を設定する。
-
-### 開発時の起動（npm スクリプト）
-
-リポジトリのルートで実行する。laya と chat（と chat が依存する api）をフォアグラウンドで起動し、Ctrl+C で止まる。
-
-```sh
-npm run dev:gpu   # GPU で起動
-npm run dev:cpu   # CPU で起動
-```
-
-どちらも compose ファイルを `-f` で直接指定するので、`.env` の `COMPOSE_FILE` の設定より優先される。
-`.env`（`API_AUTH_SECRET`）は事前に用意しておく。
-GPU と CPU を切り替えるときは、動いている方を Ctrl+C で止めてからもう一方を起動する。
-2つを同時に走らせると同じ laya コンテナを取り合い、意図しないモードで作り直されることがある。
-
-### モデルサイズと1回の問い合わせのメモリの確認
-
-laya を起動した状態で実行する。
-
-```sh
-npm run stats                                  # 既定の例文（日本語・3問）で1回問い合わせて測る
-npm run stats -- --state "判断させたい文章"    # 文章を指定して測る
-```
-
-表示するのは、チェックポイントごとの重みファイルのサイズと、1回の問い合わせの推論時間・RAM・VRAM。
-RAM は Laya プロセスのピーク（VmHWM）を問い合わせ直前にリセットし、直前の使用量との差を「この1回で」として出す。
-VRAM は Docker Desktop（WSL2）ではプロセスごとに取れないため、GPU 全体の使用量を 50ms 間隔で測った差で示す。
-起動後の最初の問い合わせ（チェックポイントごとの初回）は初期化を含むので、2回目以降より大きく出る。
-
-## エンドポイント
-
-laya-serve の全エンドポイントを同じ入出力のまま中継する。入出力の形式は [Laya の README](https://github.com/NandhaKishorM/laya) を参照。
-
-| メソッド | パス | 内容 |
-|---|---|---|
-| POST | `/v1/systemone` | 判断（`state` + `questions`。質問の型は `noul` / `choice` / `score`） |
-| POST | `/v1/systemone/batch` | 複数の `states` に同じ `questions` をまとめて判断 |
-| GET | `/health` | Laya の状態（ロード済みチェックポイント、実際の計算デバイス） |
-| GET | `/healthz` | コンテナのヘルスチェック（認証なし・情報なし） |
-
-`/healthz` 以外はすべて署名が必要。署名の作り方は [docs/auth.md](docs/auth.md)。
-`model` は `english` / `multilingual` / `typed-decisions` のいずれかで、省略すると Laya が入力の言語を見て振り分ける。
-応答ヘッダの `X-Inference-Time-Ms`（推論時間）と、混雑時の `Retry-After` は呼び出し側へそのまま返す。
+| パス | 内容 |
+|---|---|
+| [apps/laya](apps/laya) | Laya 本体のイメージ（`laya[serve]==0.3.28`。torch は CUDA 版と CPU 版を切り替え） |
+| [apps/api](apps/api) | 署名を検証して Laya へ中継する API（Node.js / Fastify / TypeScript） |
+| [apps/chat](apps/chat) | 動作確認用の判断チャット（日本語 / English） |
+| [apps/examples](apps/examples) | 外部アプリ向けのサンプルクライアント（Node.js / Python、依存なし） |
+| [laya-api-containers](laya-api-containers) | docker compose 一式と `.env.example` |
+| [docs](docs) | 手順書（`ja/`・`en/`）、スクリーンショット、開発記録 |
 
 ## 開発
+
+API とチャットのテストは各アプリのディレクトリで実行する（Node.js 22 以上）。
 
 ```sh
 cd apps/api   # または apps/chat
@@ -96,3 +72,8 @@ npm ci
 npm run typecheck
 npm test
 ```
+
+## ライセンス
+
+[Apache License 2.0](LICENSE)。
+Laya 本体と重みは、それぞれの配布元（[NandhaKishorM/laya](https://github.com/NandhaKishorM/laya)、Hugging Face の `convaiinnovations/laya*`）のライセンスに従う。

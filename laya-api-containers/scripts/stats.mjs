@@ -31,7 +31,7 @@ function mb(bytes) {
 }
 
 function signedRequest(baseUrl, secret, method, path, body) {
-  // 署名方式は docs/auth.md と apps/chat/src/layaClient.ts と同じ
+  // 署名方式は docs/ja/auth.md と apps/chat/src/layaClient.ts と同じ
   const timestamp = String(Date.now());
   const nonce = randomBytes(18).toString("base64url");
   const canonical = ["v1", timestamp, nonce, method, path, createHash("sha256").update(body).digest("hex")].join("\n");

@@ -2,7 +2,7 @@ import { createHash, createHmac, randomBytes } from "node:crypto";
 
 /**
  * laya-api を呼ぶための署名付きクライアント。
- * 本API を呼ぶ他サービスはこのファイルをそのまま持ち込むか、docs/auth.md の手順で同じ署名を実装する。
+ * 本API を呼ぶ他サービスはこのファイルをそのまま持ち込むか、docs/ja/auth.md の手順で同じ署名を実装する。
  */
 export class LayaApiClient {
   constructor(
