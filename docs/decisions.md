@@ -37,3 +37,23 @@ laya-ai.pro は公式リポジトリから参照されておらず、公式か�
 
 既定は NVIDIA GPU（CUDA 版 torch とデバイス予約）。`.env` の設定で CPU 版に切り替えられるようにする。
 判断1回あたりの目安は GPU で約35ms、CPU で約0.2〜0.5秒。
+
+## D-07 GitHub 公開用のドキュメント構成（2026-10-06）
+
+プロジェクト名は「Laya 検証のための Docker コンテナ」（英語版は "Docker Containers for Evaluating Laya"）とする。
+Laya を手元で検証するためのコンテナとして位置付け、手順は localhost での利用を中心に書く。
+別ホストから呼ぶ場合は TLS・ファイアウォール・時刻同期の注意を短い節で示す。Laya 公式とは無関係である旨を明記する。
+
+- README.md を日本語（既定）、README.en.md を英語とし、冒頭の言語リンクで相互に行き来する。
+- 手順書は docs/ja/ と docs/en/ に同名で置く: deploy.md（コンテナ展開）、chat.md（チャットの使い方）、api.md（外部アプリからの利用）、auth.md（認証仕様）。
+- 認証仕様 auth.md は外部から呼ぶ人に必要なので日英化する。decisions.md と port-registry.md は開発記録として docs/ 直下・日本語のみで残す。
+- ライセンスは Laya 本体と同じ Apache-2.0。
+
+## D-08 外部アプリ向けのサンプルクライアントとチャット UI の日英対応（2026-10-06）
+
+外部アプリから API を呼ぶ手順書に合わせて、次を実装する。
+
+- apps/examples/ に依存なしの署名付きクライアントを置く（Node.js 版と Python 版。Python は標準ライブラリだけ）。ルート直下は apps / docs / laya-api-containers の3構成を守るため examples/ は作らない。
+- 手順書の curl 例は本文をファイル経由（`--data-binary @file`）で送る形に直す。Windows の Git Bash では `--data "$BODY"` の日本語が別の文字コードで curl に渡り、署名と本文がずれて 401 になるため。
+- チャット UI はブラウザの言語で初期表示を決め、ヘッダのボタンで日本語と英語を切り替えられるようにする。既定の例題も表示言語に合わせる。
+- チャットの使い方にはスクリーンショット（日本語版・英語版）を載せ、docs/images/ に置く。
