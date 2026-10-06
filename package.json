@@ -4,6 +4,7 @@
   "description": "開発用の起動スクリプト。各アプリの依存は apps/* の package.json にある",
   "scripts": {
     "dev:gpu": "docker compose -f laya-api-containers/docker-compose.yml --profile dev up --build laya chat",
-    "dev:cpu": "docker compose -f laya-api-containers/docker-compose.yml -f laya-api-containers/docker-compose.cpu.yml --profile dev up --build laya chat"
+    "dev:cpu": "docker compose -f laya-api-containers/docker-compose.yml -f laya-api-containers/docker-compose.cpu.yml --profile dev up --build laya chat",
+    "stats": "node laya-api-containers/scripts/stats.mjs"
   }
 }

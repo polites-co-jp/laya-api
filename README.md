@@ -56,6 +56,17 @@ npm run dev:cpu   # CPU で起動
 
 どちらも compose ファイルを `-f` で直接指定するので、`.env` の `COMPOSE_FILE` の設定より優先される。
 `.env`（`API_AUTH_SECRET`）は事前に用意しておく。
+GPU と CPU を切り替えるときは、動いている方を Ctrl+C で止めてからもう一方を起動する。
+2つを同時に走らせると同じ laya コンテナを取り合い、意図しないモードで作り直されることがある。
+
+### メモリ使用量の確認
+
+```sh
+npm run stats             # 各コンテナの RAM・CPU と、laya のモード（GPU / CPU）を1回表示
+npm run stats -- --watch  # 2秒ごとに表示し続ける（推論中のピークを見るとき。Ctrl+C で終了）
+```
+
+Docker Desktop（WSL2）ではプロセスごとの VRAM が取れないため、VRAM は GPU 全体の使用量（他のアプリの分を含む）を表示する。
 
 ## エンドポイント
 
