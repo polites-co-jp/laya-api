@@ -1,6 +1,14 @@
 "use strict";
 
-const STORAGE_KEY = "laya-chat.v1";
+const STORAGE_KEY = "laya-chat.v2";
+
+/** laya-serve が持つチェックポイント。空文字は「言語を見て自動で振り分け」 */
+const MODELS = [
+  ["", "自動（言語で振り分け）"],
+  ["english", "english"],
+  ["multilingual", "multilingual"],
+  ["typed-decisions", "typed-decisions"]
+];
 
 const CRITERIA_HINT = {
   noul: "任意。1行目に true の意味、2行目に false の意味を書きます（空欄なら criteria を送りません）",
@@ -9,7 +17,7 @@ const CRITERIA_HINT = {
 };
 
 const DEFAULT_STATE = {
-  model: "laya-multilingual",
+  model: "",
   session: "",
   user: "",
   questions: [
@@ -66,7 +74,7 @@ function questionNode(q) {
 
 function collect() {
   return {
-    model: modelEl.value || state.model,
+    model: modelEl.value,
     session: $("#session").value,
     user: $("#user").value,
     questions: [...questionsEl.children].map((n) => ({
@@ -118,7 +126,8 @@ function buildRequest(text) {
   if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
     try { parsedState = JSON.parse(trimmed); } catch { /* JSON でなければ文章として送る */ }
   }
-  const req = { model: s.model, state: parsedState, questions };
+  const req = { state: parsedState, questions };
+  if (s.model) req.model = s.model;
   if (s.session) req.session_id = s.session;
   if (s.user) req.user = s.user;
   return req;
@@ -170,9 +179,14 @@ function answerNode(id, a) {
       bars({ true: p, false: 1 - p }, p >= 0.5 ? "true" : "false"));
   }
   if (a.type === "score" || "score" in a) {
-    const named = a.legend && a.legend[a.score] !== undefined ? a.legend[a.score] : undefined;
-    const label = named !== undefined ? `${a.score}（${named}）` : String(a.score);
-    return el("div", { class: "answer" }, head, el("div", { class: "value" }, label, conf), bars(a.probabilities, named ?? a.score));
+    // score は段階の期待値（小数）、probabilities のキーは段階の番号、legend が番号→ラベル名
+    const legend = a.legend ?? {};
+    const named = Object.fromEntries(Object.entries(a.probabilities ?? {}).map(([k, p]) => [legend[k] ?? k, p]));
+    const top = Object.entries(named).sort((x, y) => y[1] - x[1])[0]?.[0];
+    const score = typeof a.score === "number" ? a.score.toFixed(2) : String(a.score);
+    return el("div", { class: "answer" }, head,
+      el("div", { class: "value" }, top ?? score, el("span", { class: "conf" }, `score ${score}`), conf),
+      bars(named, top));
   }
   return el("div", { class: "answer" }, head, el("div", { class: "value" }, String(a.choice), conf), bars(a.probabilities, a.choice));
 }
@@ -185,7 +199,7 @@ function responseNode(status, body, headers, ms) {
     box.append(el("div", { class: "value" }, `エラー ${status}`), el("pre", {}, JSON.stringify(body, null, 2)));
   }
   const meta = [`${ms} ms`];
-  if (body && body.model) meta.unshift(body.model);
+  if (body && body.routing && body.routing.model) meta.unshift(`model: ${body.routing.model}`);
   if (body && body.usage) meta.push(`input ${body.usage.input_tokens ?? "?"} / output ${body.usage.output_tokens ?? "?"} tokens`);
   for (const [k, v] of Object.entries(headers)) meta.push(`${k}: ${v}`);
   box.append(el("div", { class: "meta-line" }, meta.join(" ・ ")));
@@ -212,37 +226,34 @@ async function send(text) {
   });
   const ms = Math.round(performance.now() - started);
   const headers = {};
-  res.headers.forEach((v, k) => { if (k.startsWith("x-laya-") || k === "retry-after") headers[k] = v; });
+  const inference = res.headers.get("x-inference-time-ms");
+  if (inference) headers["推論"] = `${inference} ms`;
+  const retry = res.headers.get("retry-after");
+  if (retry) headers["retry-after"] = retry;
   const raw = await res.text();
   let body;
   try { body = JSON.parse(raw); } catch { body = raw; }
   push(responseNode(res.status, body, headers, ms));
 }
 
-async function loadModels() {
-  const fallback = ["laya-english", "laya-multilingual", "jev-latest", "jev-preview", "mercury-decide"];
-  let names = fallback;
-  try {
-    const res = await fetch("/api/models");
-    if (res.ok) {
-      const data = await res.json();
-      const got = (data.models ?? []).map((m) => (typeof m === "string" ? m : m.name)).filter(Boolean);
-      if (got.length) names = got;
-    }
-  } catch { /* 取得できなければ既知の一覧を出す */ }
-  if (!names.includes(state.model)) names = [state.model, ...names];
-  modelEl.replaceChildren(...names.map((n) => el("option", { value: n }, n)));
-  modelEl.value = state.model;
+function renderModels() {
+  modelEl.replaceChildren(...MODELS.map(([value, label]) => el("option", { value }, label)));
+  modelEl.value = MODELS.some(([v]) => v === state.model) ? state.model : "";
 }
 
 async function loadStatus() {
   const s = $("#status");
   try {
-    const res = await fetch("/api/status");
+    const res = await fetch("/api/health");
     const data = await res.json().catch(() => ({}));
-    const ready = res.ok && data.ready !== false;
-    s.className = `status ${ready ? "ok" : "ng"}`;
-    s.textContent = res.ok ? (ready ? "Laya ready" : `Laya not ready: ${data.reason ?? ""}`) : `API ${res.status}`;
+    if (res.ok && data.status === "ok") {
+      s.className = "status ok";
+      const loaded = (data.loaded ?? []).join(", ") || "未ロード";
+      s.textContent = `Laya ready ・ ${data.device ?? "?"} ・ ${loaded}`;
+    } else {
+      s.className = "status ng";
+      s.textContent = res.status === 502 ? "Laya に接続できません（起動中かもしれません）" : `API ${res.status}`;
+    }
   } catch {
     s.className = "status ng";
     s.textContent = "API に接続できません";
@@ -254,7 +265,7 @@ async function loadStatus() {
 $("#session").value = state.session;
 $("#user").value = state.user;
 renderQuestions();
-loadModels();
+renderModels();
 loadStatus();
 
 modelEl.addEventListener("change", save);

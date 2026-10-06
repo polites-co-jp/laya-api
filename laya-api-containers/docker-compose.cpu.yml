@@ -1,0 +1,11 @@
+# CPU で動かすときに docker-compose.yml へ重ねる。.env の COMPOSE_FILE で指定する
+services:
+  laya:
+    build:
+      args:
+        TORCH_INDEX: cpu
+    # CPU 版は別イメージ名にし、GPU 版と切り替えても毎回ビルドし直さないようにする
+    image: laya-api-laya:cpu
+    environment:
+      LAYA_DEVICE: cpu
+    deploy: !reset {}

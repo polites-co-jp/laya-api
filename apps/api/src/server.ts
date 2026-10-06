@@ -2,28 +2,19 @@ import Fastify, { type FastifyInstance } from "fastify";
 import type { Config } from "./config.js";
 import { MemoryNonceStore, verifyRequest, type NonceStore } from "./auth.js";
 
-/** Laya から呼び出し元へそのまま返すヘッダ（課金・残量・リトライ情報） */
-const PASSTHROUGH_RESPONSE_HEADERS = [
-  "content-type",
-  "retry-after",
-  "x-laya-billing",
-  "x-laya-paid-input-tokens-used",
-  "x-laya-credits-used",
-  "x-laya-tokens-remaining",
-  "x-laya-credits-remaining"
-];
+/** laya-serve から呼び出し元へそのまま返すヘッダ（推論時間・混雑時のリトライ目安） */
+const PASSTHROUGH_RESPONSE_HEADERS = ["content-type", "retry-after", "server-timing", "x-inference-time-ms"];
 
 interface Route {
   method: "GET" | "POST";
   path: string;
 }
 
-/** Laya が公開している全エンドポイント */
+/** laya-serve が公開している全エンドポイント */
 export const LAYA_ROUTES: Route[] = [
   { method: "POST", path: "/v1/systemone" },
-  { method: "POST", path: "/alpha/decisions" },
-  { method: "GET", path: "/v1/models" },
-  { method: "GET", path: "/laya/status" }
+  { method: "POST", path: "/v1/systemone/batch" },
+  { method: "GET", path: "/health" }
 ];
 
 export interface BuildOptions {
@@ -76,7 +67,7 @@ export function buildServer(opts: BuildOptions): FastifyInstance {
       method: route.method,
       url: route.path,
       handler: async (req, reply) => {
-        const headers: Record<string, string> = { authorization: `Bearer ${config.layaApiKey}` };
+        const headers: Record<string, string> = {};
         let body: Uint8Array<ArrayBuffer> | undefined;
         if (route.method === "POST") {
           headers["content-type"] = "application/json";
@@ -84,7 +75,8 @@ export function buildServer(opts: BuildOptions): FastifyInstance {
         }
         let upstream: Response;
         try {
-          upstream = await doFetch(`${config.layaBaseUrl}${req.url}`, {
+          // 中継先のパスは固定し、呼び出し側のクエリ文字列は渡さない
+          upstream = await doFetch(`${config.layaBaseUrl}${route.path}`, {
             method: route.method,
             headers,
             body,

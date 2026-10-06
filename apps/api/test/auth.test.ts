@@ -48,7 +48,7 @@ describe("verifyRequest", () => {
   });
 
   it("rejects reuse of the signature on another path", () => {
-    expect(verify(signedHeaders({ body: "{}" }), { path: "/alpha/decisions" })).toEqual({
+    expect(verify(signedHeaders({ body: "{}" }), { path: "/v1/systemone/batch" })).toEqual({
       ok: false,
       reason: "bad_signature"
     });

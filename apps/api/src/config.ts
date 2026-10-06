@@ -4,7 +4,6 @@ export interface Config {
   authSecret: string;
   authMaxSkewMs: number;
   layaBaseUrl: string;
-  layaApiKey: string;
   upstreamTimeoutMs: number;
   bodyLimit: number;
 }
@@ -22,17 +21,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   if (authSecret.length < 32) {
     throw new Error("API_AUTH_SECRET must be set and at least 32 characters");
   }
-  const layaApiKey = env.LAYA_AI_API_KEY ?? "";
-  if (layaApiKey === "") throw new Error("LAYA_AI_API_KEY must be set");
   return {
     port: int(env, "PORT", 8080),
     host: env.HOST ?? "0.0.0.0",
     authSecret,
     authMaxSkewMs: int(env, "AUTH_MAX_SKEW_MS", 1000),
-    layaBaseUrl: (env.LAYA_BASE_URL ?? "https://laya-ai.pro/api").replace(/\/+$/, ""),
-    layaApiKey,
-    upstreamTimeoutMs: int(env, "UPSTREAM_TIMEOUT_MS", 30000),
-    // Laya の JSON 本文上限に合わせる
-    bodyLimit: 256_000
+    layaBaseUrl: (env.LAYA_BASE_URL ?? "http://laya:8000").replace(/\/+$/, ""),
+    upstreamTimeoutMs: int(env, "UPSTREAM_TIMEOUT_MS", 60000),
+    // laya-serve の本文上限（MAX_BODY_BYTES = 2 MiB）に合わせる
+    bodyLimit: 2 * 1024 * 1024
   };
 }

@@ -1,19 +1,51 @@
 name: laya-api
 
 # ホスト公開ポートは Notion「ポート管理」で予約した 22300-22399 の範囲内に限る（docs/port-registry.md）
+# 既定は GPU。CPU で動かすときは .env の COMPOSE_FILE で docker-compose.cpu.yml を重ねる
 services:
+  # Laya 本体（公式パッケージ laya[serve] の laya-serve）。ホストへは公開しない
+  laya:
+    build:
+      context: ../apps/laya
+      args:
+        TORCH_INDEX: ${LAYA_TORCH_INDEX:-cu130}
+        TORCH_VERSION: ${LAYA_TORCH_VERSION:-2.14.0}
+    restart: unless-stopped
+    init: true
+    environment:
+      LAYA_DEVICE: cuda
+      LAYA_PRELOAD: "1"
+      LAYA_MODELS: ${LAYA_MODELS:-english,multilingual}
+      LAYA_DEFAULT_MODEL: ${LAYA_DEFAULT_MODEL:-multilingual}
+      LAYA_MAX_CONCURRENT: ${LAYA_MAX_CONCURRENT:-}
+      LAYA_THREADS: ${LAYA_THREADS:-4}
+      OMP_NUM_THREADS: ${LAYA_THREADS:-4}
+      LAYA_LOG_LEVEL: ${LAYA_LOG_LEVEL:-info}
+      # 読み込む重みを Hub のコミットに固定する。reviewed は laya に同梱された検証済み SHA
+      LAYA_REVISION: ${LAYA_REVISION:-reviewed}
+    volumes:
+      - model-cache:/home/laya/.cache/huggingface
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["${LAYA_GPU_ID:-0}"]
+              capabilities: [gpu]
+
   api:
     build: ../apps/api
     restart: unless-stopped
     environment:
       API_AUTH_SECRET: ${API_AUTH_SECRET:?API_AUTH_SECRET is required}
-      LAYA_AI_API_KEY: ${LAYA_AI_API_KEY:?LAYA_AI_API_KEY is required}
-      LAYA_BASE_URL: ${LAYA_BASE_URL:-https://laya-ai.pro/api}
+      LAYA_BASE_URL: http://laya:8000
       AUTH_MAX_SKEW_MS: ${AUTH_MAX_SKEW_MS:-1000}
-      UPSTREAM_TIMEOUT_MS: ${UPSTREAM_TIMEOUT_MS:-30000}
+      UPSTREAM_TIMEOUT_MS: ${UPSTREAM_TIMEOUT_MS:-60000}
       LOG_LEVEL: ${LOG_LEVEL:-info}
     ports:
       - "${API_HOST_BIND:-127.0.0.1}:${API_HOST_PORT:-22300}:8080"
+    depends_on:
+      - laya
 
   # 開発用の動作確認チャット。profile "dev" のときだけ起動する
   chat:
@@ -29,3 +61,7 @@ services:
     depends_on:
       api:
         condition: service_healthy
+
+volumes:
+  # 重み（初回起動時に Hugging Face から取得）の置き場。作り直しても再取得しない
+  model-cache:

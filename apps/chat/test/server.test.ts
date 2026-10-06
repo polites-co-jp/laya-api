@@ -23,11 +23,11 @@ async function start(upstream: (url: string, init: RequestInit) => Response) {
 describe("chat server", () => {
   it("signs and forwards systemone requests", async () => {
     const { base, fetchImpl } = await start(
-      () => new Response('{"answers":{}}', { status: 200, headers: { "content-type": "application/json", "x-laya-credits-used": "1" } })
+      () => new Response('{"answers":{}}', { status: 200, headers: { "content-type": "application/json", "x-inference-time-ms": "30.5" } })
     );
     const res = await fetch(`${base}/api/systemone`, { method: "POST", body: '{"state":"x"}' });
     expect(res.status).toBe(200);
-    expect(res.headers.get("x-laya-credits-used")).toBe("1");
+    expect(res.headers.get("x-inference-time-ms")).toBe("30.5");
     const [url, init] = fetchImpl.mock.calls[0]!;
     expect(url).toBe("http://api:8080/v1/systemone");
     const h = init!.headers as Record<string, string>;
@@ -48,6 +48,6 @@ describe("chat server", () => {
     const { base } = await start(() => {
       throw new TypeError("fetch failed");
     });
-    expect((await fetch(`${base}/api/models`)).status).toBe(502);
+    expect((await fetch(`${base}/api/health`)).status).toBe(502);
   });
 });

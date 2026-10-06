@@ -11,13 +11,15 @@ const MIME: Record<string, string> = {
 
 /** UI の /api/* と laya-api の対応。ブラウザは署名を持たず、ここで署名して中継する */
 const PROXY: Record<string, { method: "GET" | "POST"; path: string }> = {
-  "GET /api/models": { method: "GET", path: "/v1/models" },
-  "GET /api/status": { method: "GET", path: "/laya/status" },
+  "GET /api/health": { method: "GET", path: "/health" },
   "POST /api/systemone": { method: "POST", path: "/v1/systemone" },
-  "POST /api/decisions": { method: "POST", path: "/alpha/decisions" }
+  "POST /api/systemone/batch": { method: "POST", path: "/v1/systemone/batch" }
 };
 
-const MAX_BODY = 256_000;
+/** API から UI へ渡すヘッダ */
+const PASSTHROUGH = new Set(["retry-after", "server-timing", "x-inference-time-ms"]);
+
+const MAX_BODY = 2 * 1024 * 1024;
 
 async function readBody(req: IncomingMessage): Promise<string> {
   const chunks: Buffer[] = [];
@@ -47,7 +49,7 @@ export function buildChatServer(client: LayaApiClient, publicDir: string): Serve
           "content-type": upstream.headers.get("content-type") ?? "application/json"
         };
         upstream.headers.forEach((v, k) => {
-          if (k.startsWith("x-laya-") || k === "retry-after") headers[k] = v;
+          if (PASSTHROUGH.has(k)) headers[k] = v;
         });
         return send(res, upstream.status, Buffer.from(await upstream.arrayBuffer()), headers);
       }

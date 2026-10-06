@@ -67,7 +67,7 @@ const res = await client.request(
   "POST",
   "/v1/systemone",
   JSON.stringify({
-    model: "laya-multilingual",
+    model: "multilingual",
     state: "注文した商品が壊れていた。今日中に交換してほしい",
     questions: {
       urgent: { type: "noul", instructions: "今日中の対応が必要か？" }
