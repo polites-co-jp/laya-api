@@ -7,10 +7,10 @@
 そのため、時刻・nonce・メソッド・パス・本文ハッシュに HMAC-SHA256 で署名し、nonce を1回限りにする方式を採った。
 時刻の許容幅は当初案どおり既定1秒（`AUTH_MAX_SKEW_MS` で変更可）。仕様は [auth.md](auth.md)。
 
-## D-02 API は Laya 互換のプロキシにする（2026-10-02）
+## D-02 API は Laya 互換のプロキシにする（2026-10-02、中継先は D-05 で変更）
 
-独自の簡易 API に変換するのではなく、Laya の全エンドポイント（`/v1/systemone`、`/alpha/decisions`、`/v1/models`、`/laya/status`）を同じ入出力のまま中継する。
-Laya の API キーは本 API だけが持ち、呼び出し側に渡さない。課金ヘッダ `X-Laya-*` と `Retry-After` は呼び出し側へ返す。
+独自の簡易 API に変換するのではなく、Laya のエンドポイントを同じ入出力のまま中継する。
+当初は有料ホスティング laya-ai.pro を中継先にしていたが、D-05 でローカル実行に置き換えた。
 
 ## D-03 動作確認チャットは「判断チャット」にする（2026-10-02）
 
@@ -21,3 +21,19 @@ Laya は会話を生成しない判断モデルなので、入力欄に state �
 ## D-04 ホスト公開ポートは 22300-22399（2026-10-02）
 
 Notion「ポート管理」の空きから採番した。api=22300、chat=22301。詳細は [port-registry.md](port-registry.md)。
+
+## D-05 Laya はローカルで実行する（2026-10-06）
+
+Laya はオープンソース（Apache 2.0）の判断モデルで、公式パッケージ `laya[serve]` の `laya-serve` が HTTP サーバとして動く。
+当初の実装は「Laya AI API」の検索結果に出た有料ホスティング laya-ai.pro への中継で、依頼の意図（ローカルの Laya を使う）と食い違っていた。
+laya-ai.pro は公式リポジトリから参照されておらず、公式かどうかも確認できない。
+
+- 同じ compose 内に `laya-serve` のコンテナを置き、Node.js の API はそこへ中継する。
+- 中継するのは laya-serve の全エンドポイント（`POST /v1/systemone`、`POST /v1/systemone/batch`、`GET /health`）。
+- laya のコンテナはホストへ公開しない。外から届くのは署名付きの Node.js API だけ。
+- `LAYA_AI_API_KEY` と laya-ai.pro への中継は削除する。
+
+## D-06 GPU を既定とし、.env で CPU に切り替えられるようにする（2026-10-06）
+
+既定は NVIDIA GPU（CUDA 版 torch とデバイス予約）。`.env` の設定で CPU 版に切り替えられるようにする。
+判断1回あたりの目安は GPU で約35ms、CPU で約0.2〜0.5秒。
