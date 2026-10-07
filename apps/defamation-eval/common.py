@@ -18,10 +18,14 @@ def read_csv(path: Path) -> list[dict]:
         return list(csv.DictReader(f))
 
 
-def write_csv(path: Path, rows: list[dict], fields: list[str]) -> None:
+def write_csv(path: Path, rows: list[dict], fields: list[str], headers: dict[str, str] | None = None) -> None:
+    """fields の順に書く。headers を渡すと、見出し行だけをその名前にする（値の取り出しは fields のキーのまま）"""
     path.parent.mkdir(parents=True, exist_ok=True)
     # Excel で文字化けしないよう BOM 付き UTF-8 にする
     with path.open("w", encoding="utf-8-sig", newline="") as f:
         w = csv.DictWriter(f, fieldnames=fields, extrasaction="ignore")
-        w.writeheader()
+        if headers:
+            csv.writer(f).writerow([headers.get(k, k) for k in fields])
+        else:
+            w.writeheader()
         w.writerows(rows)

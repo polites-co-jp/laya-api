@@ -26,6 +26,18 @@ SOURCE_GROUPS = {
     "not_litigated": "裁判で争われていない",
 }
 LABEL_JA = {"defamatory": "当たる", "not_defamatory": "当たらない", "uncertain": "どちらとも言えない"}
+# 05_evaluation.csv は人が読むファイルなので、見出しを日本語にする
+EVALUATION_HEADERS = {
+    "id": "ID",
+    "text": "本文",
+    "gold": "正解ラベル",
+    "laya_label": "Layaの判定",
+    "correct": "正誤（1=一致）",
+    "p_defamatory": "誹謗中傷にあたる確率",
+    "p_not_defamatory": "誹謗中傷にあたらない確率",
+    "p_uncertain": "どちらとも言えない確率",
+    "source_group": "元データの区分",
+}
 
 
 def gold_label(row: dict) -> str:
@@ -209,6 +221,7 @@ def main() -> int:
         out,
         rows,
         ["id", "text", "gold", "laya_label", "correct", *(f"p_{l}" for l in LABELS), "source_group"],
+        EVALUATION_HEADERS,
     )
     report = HERE / "report.md"
     report.write_text(render_report(rows), encoding="utf-8")
