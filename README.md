@@ -25,7 +25,7 @@ Laya 本体（公式パッケージ `laya[serve]` の `laya-serve`）に、署�
 | [API 利用手順（外部アプリから使う）](docs/ja/api.md) | サンプルクライアント（Node.js / Python）、エンドポイント、リクエストと応答の形式、エラー |
 | [認証仕様](docs/ja/auth.md) | HMAC 署名 + nonce の仕様と、curl での呼び方 |
 
-開発記録（日本語のみ）: [決定事項](docs/decisions.md) ・ [ポート台帳](docs/port-registry.md)
+開発記録（日本語のみ）: [決定事項](docs/decisions.md) ・ [ポート台帳](docs/port-registry.md) ・ [誹謗中傷判定の検証](docs/defamation-eval.md)
 
 ## クイックスタート
 
@@ -59,6 +59,7 @@ docker compose up -d --build
 | [apps/api](apps/api) | 署名を検証して Laya へ中継する API（Node.js / Fastify / TypeScript） |
 | [apps/chat](apps/chat) | 動作確認用の判断チャット（日本語 / English） |
 | [apps/examples](apps/examples) | 外部アプリ向けのサンプルクライアント（Node.js / Python、依存なし） |
+| [apps/defamation-eval](apps/defamation-eval) | 掲示板・SNS の投稿で誹謗中傷判定を試す検証スクリプト（Python、依存なし） |
 | [laya-api-containers](laya-api-containers) | docker compose 一式と `.env.example` |
 | [docs](docs) | 手順書（`ja/`・`en/`）、スクリーンショット、開発記録 |
 

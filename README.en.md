@@ -25,7 +25,7 @@ It pairs Laya itself (`laya-serve` from the official `laya[serve]` package) with
 | [Using the API from external applications](docs/en/api.md) | Sample clients (Node.js / Python), endpoints, request and response formats, errors |
 | [Authentication spec](docs/en/auth.md) | The HMAC signature + nonce scheme, and calling the API with curl |
 
-Development records (Japanese only): [decisions](docs/decisions.md) ・ [port registry](docs/port-registry.md)
+Development records (Japanese only): [decisions](docs/decisions.md) ・ [port registry](docs/port-registry.md) ・ [defamation classification experiment](docs/defamation-eval.md)
 
 ## Quick start
 
@@ -59,6 +59,7 @@ External app ──(HMAC signature)───────────────
 | [apps/api](apps/api) | The API that verifies signatures and forwards to Laya (Node.js / Fastify / TypeScript) |
 | [apps/chat](apps/chat) | The decision chat for trying Laya (Japanese / English) |
 | [apps/examples](apps/examples) | Sample clients for external applications (Node.js / Python, no dependencies) |
+| [apps/defamation-eval](apps/defamation-eval) | Experiment scripts for classifying defamatory forum and social media posts (Python, no dependencies; docs in Japanese) |
 | [laya-api-containers](laya-api-containers) | docker compose files and `.env.example` |
 | [docs](docs) | Guides (`ja/`, `en/`), screenshots, development records |
 

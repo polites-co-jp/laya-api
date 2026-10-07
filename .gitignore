@@ -3,3 +3,5 @@ dist/
 .env
 *.log
 __pycache__/
+# 誹謗中傷判定の検証データ（CC BY-NC の本文を含むためコミットしない。docs/decisions.md D-09）
+apps/defamation-eval/data/
