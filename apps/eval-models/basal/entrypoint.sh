@@ -10,8 +10,10 @@ QUANT="${BASAL_QUANT:-Q8_0}"
 DIR="/hf/models/$(basename "$REPO")"
 NAME="$(basename "$REPO" -GGUF)"
 
-hf download "$REPO" --revision "$REVISION" --local-dir "$DIR" \
-  --include "${NAME}-${QUANT}.gguf" "*.json" "*.jinja"
+# --include は1つ目のパターンしか効かず、残りがファイル名として扱われるので、ファイル名で指定する
+hf download "$REPO" "${NAME}-${QUANT}.gguf" basal.json CALIBRATION.gguf.json CALIBRATION.json \
+  tokenizer.json tokenizer_config.json chat_template.jinja generation_config.json \
+  --revision "$REVISION" --local-dir "$DIR"
 
 exec basal-serve --mode gguf --model "$DIR" --gguf "$DIR/${NAME}-${QUANT}.gguf" --name "${NAME}-${QUANT}" \
   --host 0.0.0.0 --port 8000 "$@"
