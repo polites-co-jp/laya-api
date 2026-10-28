@@ -1,7 +1,8 @@
 # 誹謗中傷判定の検証
 
 掲示板・SNS の投稿200件を Laya で「誹謗中傷にあたる / あたらない / どちらとも言えない」に分類し、正解ラベルと比べて精度を測る。
-方針は [決定事項 D-09](decisions.md#d-09-誹謗中傷判定の検証は裁判例データセットで行う2026-10-07)、スクリプトと実行手順は [apps/defamation-eval](../apps/defamation-eval/README.md)。
+同じ条件で、Laya 以外の決定モデル4つと有害コメント分類器3つも比べられる。
+方針は [決定事項 D-09](decisions.md#d-09-誹謗中傷判定の検証は裁判例データセットで行う2026-10-07)・D-10・D-11、スクリプトと実行手順は [apps/defamation-eval](../apps/defamation-eval/README.md)。
 
 ## 成果物
 
@@ -13,11 +14,12 @@
 | | [`sample_ids.csv`](../apps/defamation-eval/sample_ids.csv) | git | 抽出した200件の ID と元データ上の位置（本文なし） |
 | 2. 判定基準 | 本書の「判定基準」 | git | 正解ラベルと Laya の質問の両方の拠り所 |
 | 3. 正解ラベル | `data/03_labels.csv` | ローカル | Claude のラベルと理由、人の確認欄（`reviewed_label`・`review_note`） |
-| 4. Laya 判定 | `data/04_laya_results.csv` | ローカル | 本文と3つの確率（依頼された CSV） |
-| | `data/04_laya_raw.jsonl` | ローカル | Laya の応答そのもの |
-| | [`laya_question.json`](../apps/defamation-eval/laya_question.json) | git | Laya に送った質問 |
-| 5. 評価 | `data/05_evaluation.csv` | ローカル | 1件ごとの正解・Laya の判定・確率・正誤 |
-| | [`report.md`](../apps/defamation-eval/report.md) | git | 正答率・混同行列・閾値ごとの結果（本文なし） |
+| 4. モデルの判定 | `data/04_<model>_results.csv` | ローカル | 本文と3つの確率（依頼された CSV）。`<model>` は `laya` など |
+| | `data/04_<model>_raw.jsonl` | ローカル | モデルの応答そのもの |
+| | [`laya_question.json`](../apps/defamation-eval/laya_question.json) | git | 決定モデルに送った質問（どのモデルにも同じもの） |
+| 5. 評価 | `data/05_<model>_evaluation.csv` | ローカル | 1件ごとの正解・モデルの判定・確率・正誤 |
+| | [`reports/<model>.md`](../apps/defamation-eval/reports/) | git | モデルごとの正答率・混同行列・閾値ごとの結果（本文なし） |
+| | [`report.md`](../apps/defamation-eval/report.md) | git | モデルを並べた比較表（本文なし） |
 
 ## 判定基準
 
@@ -63,13 +65,13 @@
 
 ## 結果（2026-10-07、正解ラベルは人の確認前）
 
-数値の全体は [report.md](../apps/defamation-eval/report.md)。Laya は `laya[serve]==0.3.28` の multilingual チェックポイント（CPU）。
+数値の全体は [reports/laya.md](../apps/defamation-eval/reports/laya.md)。Laya は `laya[serve]==0.3.28` の multilingual チェックポイント（CPU）。
 
 - **Laya はほとんど「当たらない」と答える。** 最も確率の高い選択肢は、200件中185件が「当たらない」、15件が「当たる」、「どちらとも言えない」は0件だった。正答率は55.5%で、常に「当たらない」と答えた場合（49.0%）をわずかに上回る程度。
 - **「当たる」と答えたときはほぼ正しい。** 「当たる」15件のうち14件が正解（適合率93.3%）。ただし誹謗中傷66件のうち拾えたのは14件（再現率21.2%）。
 - **確率には順位付けの手がかりがある。** `p_defamatory` の ROC AUC は0.691。閾値を0.5ではなく0.2に下げると、「当たる」の適合率52.9%・再現率56.1%（F1 0.544）で、この中で最もよい釣り合いになる。
 - **「どちらとも言えない」の確率は低くまとまる。** `p_uncertain` は最大でも0.36で、正解が「どちらとも言えない」の投稿でも平均0.14。3つ目の選択肢としてはほぼ機能していない。
-- **取りこぼしの傾向**（`data/05_evaluation.csv` で `p_defamatory` が低い順に見たもの）: 侮辱語を使わない形の攻撃、つまり脅迫の言い回し・根拠のない犯罪や不正の断定・噂の拡散・容姿や障害をあげつらう表現は、`p_defamatory` が0.1未満になりやすい。上位に来るのは「死ね」「キモい」「生ゴミ」のような明示的な侮辱語を含む投稿。
+- **取りこぼしの傾向**（`data/05_laya_evaluation.csv` で `p_defamatory` が低い順に見たもの）: 侮辱語を使わない形の攻撃、つまり脅迫の言い回し・根拠のない犯罪や不正の断定・噂の拡散・容姿や障害をあげつらう表現は、`p_defamatory` が0.1未満になりやすい。上位に来るのは「死ね」「キモい」「生ゴミ」のような明示的な侮辱語を含む投稿。
 
 この結果からは、Laya の確率を誹謗中傷の自動判定にそのまま使うのは難しい。一方で、`p_defamatory` の高い投稿を優先して人が見る、という並べ替えには使える余地がある。
 質問の書き方（`laya_question.json`）を変えると結果が変わりうるが、今回は1通りだけを試した。

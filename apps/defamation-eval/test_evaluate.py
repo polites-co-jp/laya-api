@@ -68,5 +68,24 @@ class GoldLabelTest(unittest.TestCase):
             gold_label({"id": "S1", "claude_label": "defamatory", "reviewed_label": "maybe"})
 
 
+class ToRowTest(unittest.TestCase):
+    def test_confidence_falls_back_to_max_probability(self):
+        from classify import to_row
+
+        result = {
+            "model": "m",
+            "answers": {"defamation": {"choice": "uncertain", "probabilities": {"defamatory": 0.2, "not_defamatory": 0.3, "uncertain": 0.5}}},
+        }
+        r = to_row({"id": "1", "text": "t"}, result)
+        self.assertEqual((r["pred_label"], r["pred_confidence"], r["served_model"]), ("uncertain", "0.5000", "m"))
+
+    def test_rejects_other_options(self):
+        from classify import to_row
+
+        result = {"answers": {"defamation": {"choice": "yes", "probabilities": {"yes": 1.0}}}}
+        with self.assertRaises(SystemExit):
+            to_row({"id": "1", "text": "t"}, result)
+
+
 if __name__ == "__main__":
     unittest.main()

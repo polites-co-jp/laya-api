@@ -75,3 +75,34 @@ Laya を手元で検証するためのコンテナとして位置付け、手順
 - Laya には投稿本文だけを渡し、文脈（前後の投稿）は渡さない。正解ラベルも本文だけで判断する。
 - 質問が日本語なので、英語の投稿も含めて `model` を `multilingual` に固定する（自動の振り分けでは英語の投稿が english に回り、日本語の質問を読めない）。
 - コミットする文書（判定基準・結果の要約）には、データセットの実投稿を引用しない。例は架空の文にする。
+
+## D-10 誹謗中傷判定の検証で Laya 以外の決定モデルも比べられるようにする（2026-10-29）
+
+D-09 の検証（同じ200件・同じ正解ラベル・同じ質問）を、Laya 以外の決定モデルでも実行し、精度を並べて比べられるようにする。
+対象は依頼された4モデル。どれも選択肢ごとの確率を返す決定モデルで、日本語への対応は明記されていない。
+
+| 依頼の名前 | 使うもの | 動かし方 |
+|---|---|---|
+| Chon-1.0-12B | `ninhnv/chon-1.0-12b`（Gemma 4 12B への LoRA） | 公式の chon サーバを FP8 で動かす。16GB に載らなければ `ninhnv/chon-1.0-e2b` に切り替え、どちらで測ったかをレポートに書く |
+| Basal-Omni-1.0-Ultra | `Remek/basal-omni-1.0-max`（12B）の GGUF Q8_0 | Ultra（31B）は量子化しても約33GB で 16GB に載らないため、同じ系統の max に替える。Ultra の結果ではないことをレポートに書く |
+| H2O-Lightning-4B | `h2oai/h2o-lightning-4b-gguf` の BF16 | llama.cpp の llama-server。16GB に載るので量子化しない |
+| JEB | TypeSafe の Jev（クラウド API） | `https://api.typesafe.ai/v1/systemone`。API キー（`TYPESAFE_API_KEY`）が要り、投稿200件を外部へ送る。AutoTrust の JEV-9B ではない |
+
+- ローカルのモデルは `laya-api-containers` に compose の profile として置き、1つずつ起動する。GPU が 16GB なので同時には載せない。
+- ローカルのモデルのサーバは認証を持たないので、127.0.0.1 にだけ公開する（22310-22312、[port-registry.md](port-registry.md)）。
+- 判定スクリプトはモデルを選べるようにし、結果はモデルごとのファイルに分けて残す。評価レポートはモデルを並べた比較表と、モデルごとの詳細にする。
+
+## D-11 有害コメント分類器3つも比べる（2026-10-29）
+
+D-10 の比較に、次の3つの有害コメント分類器を加える。どれも日本語を学習言語に含む。
+
+| 依頼の名前 | 使うもの |
+|---|---|
+| Multilingual Toxicity Base | `Horizon-Labs/multilingual-toxicity-base`（mmBERT-base、7ラベルの多ラベル分類） |
+| XLM-R Large Toxicity Classifier | `textdetox/xlmr-large-toxicity-classifier-v2`（初版は日本語を含まないため、2025年の後継版） |
+| DistilBERT Multilingual Toxicity Classifier | `gravitee-io/distilbert-multilingual-toxicity-classifier` |
+
+- これらは質問を受け取らず、「有害か」の確率だけを返す。そのため toxic の確率を `p_defamatory`、1 からそれを引いた値を `p_not_defamatory` とし、`p_uncertain` は 0 にする。最も確率の高い選択肢が判定になるので、0.5 以上なら「当たる」になる。
+- Multilingual Toxicity Base は `toxicity` ラベルの確率を使う。ほかのラベル（insult・threat など）の確率は応答の生データに残す。
+- 「有害」は誹謗中傷より広く（相手のいない暴言も含む）、狭くもある（侮辱語のない悪評の断定は含みにくい）。比較では ROC AUC と閾値ごとの結果を主に見る。
+- 小さいモデルなので CPU で動かす。3つを1つのコンテナ（profile `eval-toxicity`、127.0.0.1:22313）にまとめ、GPU を使う他のモデルと同時に動かせるようにする。

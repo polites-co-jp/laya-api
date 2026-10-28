@@ -62,6 +62,86 @@ services:
       api:
         condition: service_healthy
 
+  # --- 誹謗中傷判定の比較用モデル（docs/decisions.md D-10） ---
+  # profile を指定したときだけ起動する。GPU が 16GB なので1つずつ動かし、終わったら止める。
+  # どれも認証を持たないので 127.0.0.1 にだけ公開する。/v1/systemone は Laya と同じ形式
+
+  # H2O-Lightning-4B（BF16 の GGUF）。llama-server が /v1/systemone を答える（b11773 以降）
+  h2o-lightning:
+    image: ghcr.io/ggml-org/llama.cpp:server-cuda-b11960
+    profiles: ["eval-h2o"]
+    environment:
+      LLAMA_CACHE: /hf/llama.cpp
+    command:
+      - -hf
+      - h2oai/h2o-lightning-4b-gguf:BF16
+      - --alias
+      - h2o-lightning-4b
+      - -c
+      - "8192"
+      - -np
+      - "1"
+      - --no-kv-unified
+      - -ngl
+      - "999"
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8080"
+    volumes:
+      - eval-model-cache:/hf
+    ports:
+      - "127.0.0.1:${EVAL_H2O_HOST_PORT:-22310}:8080"
+    deploy: &eval-gpu
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["${LAYA_GPU_ID:-0}"]
+              capabilities: [gpu]
+
+  # Basal-Omni（1.0-max 12B の GGUF。Ultra 31B は 16GB に載らないため。D-10）
+  basal:
+    build: ../apps/eval-models/basal
+    profiles: ["eval-basal"]
+    environment:
+      BASAL_QUANT: ${EVAL_BASAL_QUANT:-Q8_0}
+    volumes:
+      - eval-model-cache:/hf
+    ports:
+      - "127.0.0.1:${EVAL_BASAL_HOST_PORT:-22311}:8000"
+    deploy: *eval-gpu
+
+  # Chon-1.0-12B（FP8）。GPU に載らなければ EVAL_CHON_MODEL=ninhnv/chon-1.0-e2b、EVAL_CHON_QUANTIZE= にする
+  chon:
+    build: ../apps/eval-models/chon
+    profiles: ["eval-chon"]
+    environment:
+      CHON_MODEL: ${EVAL_CHON_MODEL:-ninhnv/chon-1.0-12b@442d2ca86736908fb6dc737f1fa30028b0f1678b}
+      CHON_QUANTIZE: ${EVAL_CHON_QUANTIZE-fp8}
+    volumes:
+      - eval-model-cache:/hf
+    ports:
+      - "127.0.0.1:${EVAL_CHON_HOST_PORT:-22312}:8000"
+    deploy: *eval-gpu
+
+  # 有害コメント分類器3つ（D-11）。小さいので CPU で動かし、GPU を使う上のモデルと同時に起動してよい
+  toxicity:
+    build: ../apps/eval-models/toxicity
+    profiles: ["eval-toxicity"]
+    environment:
+      TOXICITY_MODELS: >-
+        Horizon-Labs/multilingual-toxicity-base@a7320481ec5fac51d009e6ca73623d59304102fb,
+        textdetox/xlmr-large-toxicity-classifier-v2@38ab1b77bd3ff7779777cfa5cda203d9912b14b9,
+        gravitee-io/distilbert-multilingual-toxicity-classifier@865ad1b453a49e4a7f2471fc40b727ececd28314
+      TOXICITY_THREADS: ${LAYA_THREADS:-4}
+    volumes:
+      - eval-model-cache:/hf
+    ports:
+      - "127.0.0.1:${EVAL_TOXICITY_HOST_PORT:-22313}:8000"
+
 volumes:
   # 重み（初回起動時に Hugging Face から取得）の置き場。作り直しても再取得しない
   model-cache:
+  # 比較用モデルの重みの置き場（合わせて数十GB になる）
+  eval-model-cache:

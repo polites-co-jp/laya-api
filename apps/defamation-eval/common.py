@@ -13,6 +13,11 @@ DATA_DIR = HERE / "data"
 LABELS = ("defamatory", "not_defamatory", "uncertain")
 
 
+def results_path(model: str) -> Path:
+    """手順4の、モデルごとの判定結果"""
+    return DATA_DIR / f"04_{model}_results.csv"
+
+
 def read_csv(path: Path) -> list[dict]:
     with path.open(encoding="utf-8-sig", newline="") as f:
         return list(csv.DictReader(f))
