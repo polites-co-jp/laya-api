@@ -28,10 +28,13 @@ def fp8_quantize_to_cuda(model):
     from torchao.quantization import Float8DynamicActivationFloat8WeightConfig, PerRow, quantize_
 
     config = Float8DynamicActivationFloat8WeightConfig(granularity=PerRow())
+    # 12B は「迷ったときに考える」ために LoRA を基盤モデルへ合成せずに残し、LoRA の重みは float32 のまま。
+    # torchao の FP8（PerRow）は bf16 の重みしか受け付けないので、bf16 でない Linear（LoRA の A・B）はそのまま残す
     targets = [
         name
         for name, mod in model.named_modules()
         if isinstance(mod, nn.Linear)
+        and mod.weight.dtype == torch.bfloat16
         and "lm_head" not in name.lower()
         and not any(x in name.lower() for x in chon.quantize.NON_TEXT)
     ]

@@ -149,7 +149,7 @@ MODELS = {
               _local("EVAL_H2O_HOST_PORT", 22310)),
         Model("basal", "Basal-Omni-1.0-Max", "依頼の Ultra（31B）は 16GB に載らないため 12B の max の GGUF で代替", 1,
               _local("EVAL_BASAL_HOST_PORT", 22311)),
-        Model("chon", "Chon-1.0", "12B を FP8 で。載らないときは E2B（実際の版は「応答のモデル名」）", 1,
+        Model("chon", "Chon-1.0", "12B を FP8（torchao）で。迷ったときの推論は vLLM ではなく hf-static", 1,
               _local("EVAL_CHON_HOST_PORT", 22312)),
         # 有害コメント分類器（D-11）。p_defamatory = 有害の確率、p_uncertain = 0
         Model("toxicity-base", "Multilingual Toxicity Base", "有害コメント分類器。toxicity ラベルの確率を「当たる」とみなす",
