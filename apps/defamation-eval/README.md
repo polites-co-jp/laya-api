@@ -22,6 +22,9 @@ python classify.py
 
 # 5. 評価する -> data/05_<model>_evaluation.csv, reports/<model>.md, report.md（比較表）
 python evaluate.py
+
+# 6. 全モデルの結果を1つの Excel にまとめる -> data/06_model_comparison.xlsx
+python export_excel.py
 ```
 
 ## ほかのモデルで判定する

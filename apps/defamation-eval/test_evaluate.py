@@ -87,5 +87,22 @@ class ToRowTest(unittest.TestCase):
             to_row({"id": "1", "text": "t"}, result)
 
 
+class ExcelTest(unittest.TestCase):
+    def test_col_name(self):
+        from export_excel import col_name
+
+        self.assertEqual([col_name(i) for i in (0, 25, 26, 38, 701, 702)], ["A", "Z", "AA", "AM", "ZZ", "AAA"])
+
+    def test_sheet_xml_escapes_text_and_keeps_numbers(self):
+        from export_excel import DECIMAL, Sheet
+
+        sheet = Sheet("s", [10])
+        sheet.add("<a&b>", (0.25, DECIMAL), 3)
+        xml = sheet.xml()
+        self.assertIn("&lt;a&amp;b&gt;", xml)
+        self.assertIn('<c r="B1" s="3"><v>0.25</v></c>', xml)
+        self.assertIn('<c r="C1" s="0"><v>3</v></c>', xml)
+
+
 if __name__ == "__main__":
     unittest.main()

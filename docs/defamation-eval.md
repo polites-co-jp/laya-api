@@ -20,6 +20,7 @@
 | 5. 評価 | `data/05_<model>_evaluation.csv` | ローカル | 1件ごとの正解・モデルの判定・確率・正誤 |
 | | [`reports/<model>.md`](../apps/defamation-eval/reports/) | git | モデルごとの正答率・混同行列・閾値ごとの結果（本文なし） |
 | | [`report.md`](../apps/defamation-eval/report.md) | git | モデルを並べた比較表（本文なし） |
+| 6. Excel | `data/06_model_comparison.xlsx` | ローカル | 全モデルの比較表・投稿ごとの全モデルの判定と確率・混同行列・正解ラベル・モデルごとの結果を1ファイルにまとめたもの |
 
 ## 判定基準
 
