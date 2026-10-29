@@ -5,6 +5,7 @@
 
 シート:
     比較              モデルごとの指標（report.md の比較表と同じ）と判定の件数
+    詳細指標          区分ごとの適合率・再現率・F1、正答率などの 95% 信頼区間、確率の当たり具合（report.md の詳細指標と同じ）
     投稿ごと          1行1投稿。本文・正解ラベルと、全モデルの判定・3つの確率・正誤を横に並べる
     混同行列          モデルごとの混同行列
     正解ラベル        正解ラベルと、Claude が付けた理由・人の確認欄
@@ -19,13 +20,14 @@ Excel を入れていない環境でも動くよう、標準ライブラリだ�
 from __future__ import annotations
 
 import argparse
+import math
 import sys
 import zipfile
 from collections import Counter
 from xml.sax.saxutils import escape
 
 from common import DATA_DIR, LABELS, read_csv, results_path
-from evaluate import LABEL_JA, SOURCE_GROUPS, build_rows, confusion, gold_label, summary
+from evaluate import LABEL_JA, SOURCE_GROUPS, build_rows, confusion, detailed_stats, gold_label, summary
 from models import MODELS
 
 OUT = DATA_DIR / "06_model_comparison.xlsx"
@@ -195,6 +197,36 @@ def per_post_sheet(results) -> Sheet:
     return sheet
 
 
+def detailed_sheet(results) -> Sheet:
+    """report.md の「詳細指標」と同じ内容。区間は下限と上限を別の列にして、Excel で並べ替えや計算をしやすくする"""
+    sheet = Sheet("詳細指標", [34, 18, 10, 10, 10, 10, 10, 10, 10, 10, 10, 12, 12], freeze=(0, 1), autofilter=False)
+    stats = [(model, detailed_stats(rows)) for model, rows in results]
+    sheet.header("モデル", "正答率", "下限", "上限", "マクロ F1", "下限", "上限", "ROC AUC", "下限", "上限",
+                 "Brier スコア", "対数損失")
+    for model, s in stats:
+        sheet.add(model.title, (s["accuracy"], PERCENT), *((v, PERCENT) for v in s["accuracy_ci"]),
+                  (s["macro_f1"], DECIMAL), *((v, DECIMAL) for v in s["macro_f1_ci"]),
+                  (s["auc"], DECIMAL), *((v, DECIMAL) for v in s["auc_ci"]),
+                  (s["brier"], DECIMAL), (s["log_loss"], DECIMAL))
+    sheet.add()
+    sheet.header("モデル", "区分", "適合率", "下限", "上限", "再現率", "下限", "上限", "F1", "下限", "上限",
+                 "判定した件数", "正解の件数")
+    for label in LABELS:
+        for model, s in stats:
+            c = s["classes"][label]
+            # 判定した件数が 0 の適合率の区間は求まらないので空欄にする
+            ci = [None if math.isnan(v) else (v, PERCENT) for v in c["precision_ci"]]
+            sheet.add(model.title, LABEL_JA[label], (c["precision"], PERCENT), *ci,
+                      (c["recall"], PERCENT), *((v, PERCENT) for v in c["recall_ci"]),
+                      (c["f1"], DECIMAL), *((v, DECIMAL) for v in c["f1_ci"]), c["predicted"], c["support"])
+    sheet.add()
+    sheet.add("区間は 95% 信頼区間。正答率・適合率・再現率は Wilson 法、F1・マクロ F1・ROC AUC は投稿のブートストラップ（1,000 回、シード固定）。")
+    sheet.add("200件は統計としては多くないので、区間が重なるモデル同士の差は偶然の範囲かもしれない。")
+    sheet.add("Brier スコアと対数損失は確率そのものの当たり具合で、小さいほどよい。Brier は 0 が完全、確率をいつも 1/3 ずつにすると 0.667。")
+    sheet.add("適合率は判定した件数が 0 のとき 0% とし、区間は空欄にした。")
+    return sheet
+
+
 def confusion_sheet(results) -> Sheet:
     sheet = Sheet("混同行列", [34, 22, 14, 14, 18], freeze=(0, 0), autofilter=False)
     for model, rows in results:
@@ -241,7 +273,7 @@ def main() -> int:
         if [r["id"] for r in rows] != ids:
             raise SystemExit(f"{model.name} の判定結果の投稿が {results[0][0].name} とそろっていない")
 
-    sheets = [comparison_sheet(results), per_post_sheet(results), confusion_sheet(results), labels_sheet()]
+    sheets = [comparison_sheet(results), detailed_sheet(results), per_post_sheet(results), confusion_sheet(results), labels_sheet()]
     sheets += [model_sheet(model, rows) for model, rows in results]
     write_xlsx(OUT, sheets)
     print(f"{len(results)} モデル: {', '.join(names)}")

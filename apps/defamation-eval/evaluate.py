@@ -16,6 +16,8 @@
 from __future__ import annotations
 
 import argparse
+import math
+import random
 import sys
 from collections import Counter
 
@@ -94,6 +96,78 @@ def roc_auc(rows: list[dict]) -> float:
         return float("nan")
     wins = sum(1.0 if p > q else 0.5 if p == q else 0.0 for p in pos for q in neg)
     return wins / (len(pos) * len(neg))
+
+
+BOOTSTRAP_ROUNDS = 1000
+BOOTSTRAP_SEED = 20261029
+
+
+def wilson_interval(k: int, n: int, z: float = 1.96) -> tuple[float, float]:
+    """割合 k/n の 95% 信頼区間（Wilson 法）"""
+    if n == 0:
+        return float("nan"), float("nan")
+    p = k / n
+    center = (p + z * z / (2 * n)) / (1 + z * z / n)
+    half = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / (1 + z * z / n)
+    return center - half, center + half
+
+
+def bootstrap_interval(rows: list[dict], metric) -> tuple[float, float]:
+    """投稿を復元抽出して metric を計算し直した 95% 信頼区間（パーセンタイル法）。シード固定で再現できる"""
+    rng = random.Random(BOOTSTRAP_SEED)
+    values = []
+    for _ in range(BOOTSTRAP_ROUNDS):
+        v = metric([rows[rng.randrange(len(rows))] for _ in rows])
+        if not math.isnan(v):
+            values.append(v)
+    if not values:
+        return float("nan"), float("nan")
+    values.sort()
+    return values[int(0.025 * (len(values) - 1))], values[int(0.975 * (len(values) - 1))]
+
+
+def brier_score(rows: list[dict]) -> float:
+    """3つの確率と正解（one-hot）の二乗誤差の平均。0 が最良、2 が最悪。判定ではなく確率そのものの当たり具合"""
+    return sum(sum((r[f"p_{l}"] - (r["gold"] == l)) ** 2 for l in LABELS) for r in rows) / len(rows)
+
+
+def log_loss(rows: list[dict], eps: float = 1e-6) -> float:
+    """正解の選択肢に付けた確率の対数の平均を負にしたもの。0 が最良で、自信を持って外すほど大きくなる"""
+    return -sum(math.log(min(max(r[f"p_{r['gold']}"], eps), 1.0)) for r in rows) / len(rows)
+
+
+def macro_f1(rows: list[dict]) -> float:
+    pc = per_class([(r["gold"], r["pred_label"]) for r in rows])
+    return sum(v[2] for v in pc.values()) / len(LABELS)
+
+
+def class_f1(label: str):
+    return lambda rows: per_class([(r["gold"], r["pred_label"]) for r in rows])[label][2]
+
+
+def detailed_stats(rows: list[dict]) -> dict:
+    """詳細指標の点推定と 95% 信頼区間"""
+    pairs = [(r["gold"], r["pred_label"]) for r in rows]
+    pc = per_class(pairs)
+    predicted = Counter(p for _, p in pairs)
+    correct = sum(1 for g, p in pairs if g == p)
+    classes = {}
+    for label in LABELS:
+        p, r, f, support = pc[label]
+        tp = sum(1 for g, q in pairs if g == label and q == label)
+        classes[label] = {
+            "precision": p, "precision_ci": wilson_interval(tp, predicted[label]),
+            "recall": r, "recall_ci": wilson_interval(tp, support),
+            "f1": f, "f1_ci": bootstrap_interval(rows, class_f1(label)),
+            "support": support, "predicted": predicted[label],
+        }
+    return {
+        "accuracy": correct / len(rows), "accuracy_ci": wilson_interval(correct, len(rows)),
+        "macro_f1": macro_f1(rows), "macro_f1_ci": bootstrap_interval(rows, macro_f1),
+        "auc": roc_auc(rows), "auc_ci": bootstrap_interval(rows, roc_auc),
+        "brier": brier_score(rows), "log_loss": log_loss(rows),
+        "classes": classes,
+    }
 
 
 def build_rows(model: str) -> list[dict]:
@@ -265,7 +339,63 @@ def render_comparison(results: list[tuple[Model, list[dict]]]) -> str:
     for model, rows in results:
         served = "、".join(sorted({r["served_model"] for r in rows if r["served_model"]})) or "—"
         lines.append(f"| {model.title} | {model.note} | {served} |")
+    lines += render_detailed(results)
     return "\n".join(lines) + "\n"
+
+
+def fmt_ci(ci: tuple[float, float], percent: bool = True) -> str:
+    lo, hi = ci
+    if math.isnan(lo):
+        return "—"
+    return f"{pct(lo)}〜{pct(hi)}" if percent else f"{lo:.3f}〜{hi:.3f}"
+
+
+def render_detailed(results: list[tuple[Model, list[dict]]]) -> list[str]:
+    stats = [(model, detailed_stats(rows)) for model, rows in results]
+    lines = [
+        "",
+        "## 詳細指標（95% 信頼区間つき）",
+        "",
+        "200件は統計としては多くないので、どの指標にも誤差の幅がある。区間が重なるモデル同士の差は、偶然の範囲かもしれない。",
+        "正答率・適合率・再現率の区間は Wilson 法、F1 と ROC AUC の区間は投稿のブートストラップ（1,000 回、シード固定）。",
+        "",
+        "### 全体",
+        "",
+        "| モデル | 正答率 | 正答率の区間 | マクロ F1 | マクロ F1 の区間 | ROC AUC | ROC AUC の区間 | Brier スコア | 対数損失 |",
+        "|---|---|---|---|---|---|---|---|---|",
+    ]
+    for model, s in stats:
+        lines.append(
+            f"| {model.title} | {pct(s['accuracy'])} | {fmt_ci(s['accuracy_ci'])} | {s['macro_f1']:.3f} "
+            f"| {fmt_ci(s['macro_f1_ci'], False)} | {s['auc']:.3f} | {fmt_ci(s['auc_ci'], False)} "
+            f"| {s['brier']:.3f} | {s['log_loss']:.3f} |"
+        )
+    lines += [
+        "",
+        "- Brier スコアと対数損失は、判定ではなく確率そのものの当たり具合。どちらも小さいほどよい。"
+        "Brier スコアは 0 が完全で、3つの確率をいつも 1/3 ずつにすると 0.667。",
+        "- 有害コメント分類器は「どちらとも言えない」の確率が常に 0 なので、正解が「どちらとも言えない」の投稿で対数損失が大きくなる（D-11）。",
+    ]
+    for label in LABELS:
+        lines += [
+            "",
+            f"### 「{LABEL_JA[label]}」",
+            "",
+            "| モデル | 適合率 | 適合率の区間 | 再現率 | 再現率の区間 | F1 | F1 の区間 | 判定した件数 | 正解の件数 |",
+            "|---|---|---|---|---|---|---|---|---|",
+        ]
+        for model, s in stats:
+            c = s["classes"][label]
+            lines.append(
+                f"| {model.title} | {pct(c['precision'])} | {fmt_ci(c['precision_ci'])} | {pct(c['recall'])} "
+                f"| {fmt_ci(c['recall_ci'])} | {c['f1']:.3f} | {fmt_ci(c['f1_ci'], False)} | {c['predicted']} | {c['support']} |"
+            )
+    lines += [
+        "",
+        "- 適合率: モデルがその区分と判定したもののうち、正解と一致した割合。判定した件数が 0 のときは 0% とし、区間は出さない。",
+        "- 再現率: 正解がその区分の投稿のうち、モデルが同じ区分と判定できた割合。",
+    ]
+    return lines
 
 
 def main() -> int:

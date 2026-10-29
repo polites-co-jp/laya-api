@@ -87,6 +87,40 @@ class ToRowTest(unittest.TestCase):
             to_row({"id": "1", "text": "t"}, result)
 
 
+class StatsTest(unittest.TestCase):
+    def test_wilson_interval(self):
+        from evaluate import wilson_interval
+
+        lo, hi = wilson_interval(50, 100)
+        self.assertAlmostEqual(lo, 0.4038, places=3)
+        self.assertAlmostEqual(hi, 0.5962, places=3)
+        lo, hi = wilson_interval(0, 36)
+        self.assertEqual(lo, 0.0)
+        self.assertAlmostEqual(hi, 0.0964, places=3)
+
+    def test_brier_and_log_loss(self):
+        import math
+
+        from evaluate import brier_score, log_loss
+
+        perfect = [{"gold": "defamatory", "p_defamatory": 1.0, "p_not_defamatory": 0.0, "p_uncertain": 0.0}]
+        even = [{"gold": "uncertain", "p_defamatory": 1 / 3, "p_not_defamatory": 1 / 3, "p_uncertain": 1 / 3}]
+        self.assertAlmostEqual(brier_score(perfect), 0.0)
+        self.assertAlmostEqual(brier_score(even), 2 / 3)
+        self.assertAlmostEqual(log_loss(perfect), 0.0)
+        self.assertAlmostEqual(log_loss(even), math.log(3))
+
+    def test_bootstrap_is_reproducible(self):
+        from evaluate import bootstrap_interval
+
+        rows = [{"v": i} for i in range(50)]
+        mean = lambda rs: sum(r["v"] for r in rs) / len(rs)
+        self.assertEqual(bootstrap_interval(rows, mean), bootstrap_interval(rows, mean))
+        lo, hi = bootstrap_interval(rows, mean)
+        self.assertLess(lo, 24.5)
+        self.assertGreater(hi, 24.5)
+
+
 class ExcelTest(unittest.TestCase):
     def test_col_name(self):
         from export_excel import col_name
