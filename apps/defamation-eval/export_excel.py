@@ -4,6 +4,7 @@
 手順4の結果があるモデルをすべて載せる。本文を含むので data/（git 管理外）に書く。
 
 シート:
+    適合率・再現率・F値  モデルごとの「当たる」と3区分平均の適合率・再現率・F 値と、実行環境（GPU / CPU）
     比較              モデルごとの指標（report.md の比較表と同じ）と判定の件数
     詳細指標          区分ごとの適合率・再現率・F1、正答率などの 95% 信頼区間、確率の当たり具合（report.md の詳細指標と同じ）
     投稿ごと          1行1投稿。本文・正解ラベルと、全モデルの判定・3つの確率・正誤を横に並べる
@@ -27,7 +28,7 @@ from collections import Counter
 from xml.sax.saxutils import escape
 
 from common import DATA_DIR, LABELS, read_csv, results_path
-from evaluate import LABEL_JA, SOURCE_GROUPS, build_rows, confusion, detailed_stats, gold_label, summary
+from evaluate import LABEL_JA, SOURCE_GROUPS, build_rows, confusion, detailed_stats, gold_label, macro_prf, per_class, summary
 from models import MODELS
 
 OUT = DATA_DIR / "06_model_comparison.xlsx"
@@ -152,6 +153,22 @@ def write_xlsx(path, sheets: list[Sheet]) -> None:
             z.writestr(f"xl/worksheets/sheet{i}.xml", s.xml())
 
 
+def prf_sheet(results) -> Sheet:
+    """report.md の「適合率・再現率・F 値と実行環境」と同じ表"""
+    sheet = Sheet("適合率・再現率・F値", [34, 10, 12, 12, 12, 12, 12, 12], freeze=(1, 1), autofilter=False)
+    sheet.header("モデル", "実行環境", "「当たる」の適合率", "「当たる」の再現率", "「当たる」の F 値",
+                 "3区分平均の適合率", "3区分平均の再現率", "3区分平均の F 値")
+    for model, rows in results:
+        p, r, f, _ = per_class([(x["gold"], x["pred_label"]) for x in rows])["defamatory"]
+        mp, mr, mf = macro_prf(rows)
+        sheet.add(model.title, model.device, (p, PERCENT), (r, PERCENT), (f, DECIMAL),
+                  (mp, PERCENT), (mr, PERCENT), (mf, DECIMAL))
+    sheet.add()
+    sheet.add("実行環境は、この検証で判定を動かした計算資源。GPU は NVIDIA RTX 5060 Ti 16GB。")
+    sheet.add("3区分平均は「当たる」「当たらない」「どちらとも言えない」の値の単純平均（マクロ平均）。")
+    return sheet
+
+
 def comparison_sheet(results) -> Sheet:
     sheet = Sheet("比較", [34, 12, 10, 12, 12, 12, 10, 10, 10, 10, 10, 12, 60, 40], freeze=(1, 1), autofilter=False)
     sheet.header("モデル", "正答率（3値）", "マクロ F1", "「当たる」の適合率", "「当たる」の再現率", "「当たる」の F1",
@@ -273,7 +290,7 @@ def main() -> int:
         if [r["id"] for r in rows] != ids:
             raise SystemExit(f"{model.name} の判定結果の投稿が {results[0][0].name} とそろっていない")
 
-    sheets = [comparison_sheet(results), detailed_sheet(results), per_post_sheet(results), confusion_sheet(results), labels_sheet()]
+    sheets = [prf_sheet(results), comparison_sheet(results), detailed_sheet(results), per_post_sheet(results), confusion_sheet(results), labels_sheet()]
     sheets += [model_sheet(model, rows) for model, rows in results]
     write_xlsx(OUT, sheets)
     print(f"{len(results)} モデル: {', '.join(names)}")

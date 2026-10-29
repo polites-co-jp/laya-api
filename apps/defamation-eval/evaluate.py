@@ -330,6 +330,9 @@ def render_comparison(results: list[tuple[Model, list[dict]]]) -> str:
         "",
         "- 正答率・マクロ F1・適合率・再現率は、最も確率の高い選択肢をモデルの判定としたもの（3値）。",
         "- ROC AUC と閾値の列は `p_defamatory` だけを使う（「当たる」とそれ以外の分離）。閾値は 0.1〜0.7 の 0.1 刻み。",
+    ]
+    lines += render_prf(results)
+    lines += [
         "",
         "## モデルの補足",
         "",
@@ -341,6 +344,32 @@ def render_comparison(results: list[tuple[Model, list[dict]]]) -> str:
         lines.append(f"| {model.title} | {model.note} | {served} |")
     lines += render_detailed(results)
     return "\n".join(lines) + "\n"
+
+
+def macro_prf(rows: list[dict]) -> tuple[float, float, float]:
+    """3区分の適合率・再現率・F 値をそれぞれ単純平均したもの"""
+    pc = per_class([(r["gold"], r["pred_label"]) for r in rows])
+    return tuple(sum(v[i] for v in pc.values()) / len(LABELS) for i in range(3))
+
+
+def render_prf(results: list[tuple[Model, list[dict]]]) -> list[str]:
+    lines = [
+        "",
+        "## 適合率・再現率・F 値と実行環境",
+        "",
+        "| モデル | 実行環境 | 「当たる」の適合率 | 「当たる」の再現率 | 「当たる」の F 値 | 3区分平均の適合率 | 3区分平均の再現率 | 3区分平均の F 値 |",
+        "|---|---|---|---|---|---|---|---|",
+    ]
+    for model, rows in results:
+        p, r, f, _ = per_class([(x["gold"], x["pred_label"]) for x in rows])["defamatory"]
+        mp, mr, mf = macro_prf(rows)
+        lines.append(f"| {model.title} | {model.device} | {pct(p)} | {pct(r)} | {f:.3f} | {pct(mp)} | {pct(mr)} | {mf:.3f} |")
+    lines += [
+        "",
+        "- 実行環境は、この検証で判定を動かした計算資源。GPU は NVIDIA RTX 5060 Ti 16GB。",
+        "- 3区分平均は「当たる」「当たらない」「どちらとも言えない」の値の単純平均（マクロ平均）。3区分平均の F 値はマクロ F1 と同じ。",
+    ]
+    return lines
 
 
 def fmt_ci(ci: tuple[float, float], percent: bool = True) -> str:

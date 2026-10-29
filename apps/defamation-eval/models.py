@@ -31,6 +31,7 @@ class Model:
     note: str  # レポートに出す補足（依頼との違いなど）
     batch_size: int
     make_decider: Callable[[], Callable[[list[str], dict], list[dict]]]
+    device: str = "—"  # この検証で判定を動かした計算資源（GPU / CPU / クラウド）
 
 
 def _env(name: str) -> str:
@@ -143,21 +144,21 @@ def _jev():
 MODELS = {
     m.name: m
     for m in [
-        Model("laya", "Laya", "multilingual チェックポイント", LAYA_BATCH_SIZE, _laya),
-        Model("jev", "Jev（TypeSafe）", "クラウド API。依頼の「JEB」", 1, _jev),
+        Model("laya", "Laya", "multilingual チェックポイント", LAYA_BATCH_SIZE, _laya, device="CPU"),
+        Model("jev", "Jev（TypeSafe）", "クラウド API。依頼の「JEB」", 1, _jev, device="クラウド"),
         Model("h2o-lightning", "H2O-Lightning-4B", "BF16 の GGUF（量子化なし）を llama-server で", 1,
-              _local("EVAL_H2O_HOST_PORT", 22310)),
+              _local("EVAL_H2O_HOST_PORT", 22310), device="GPU"),
         Model("basal", "Basal-Omni-1.0-Max", "依頼の Ultra（31B）は 16GB に載らないため 12B の max の GGUF で代替", 1,
-              _local("EVAL_BASAL_HOST_PORT", 22311)),
+              _local("EVAL_BASAL_HOST_PORT", 22311), device="GPU"),
         Model("chon", "Chon-1.0", "12B を FP8（torchao）で。迷ったときの推論は vLLM ではなく hf-static", 1,
-              _local("EVAL_CHON_HOST_PORT", 22312)),
+              _local("EVAL_CHON_HOST_PORT", 22312), device="GPU"),
         # 有害コメント分類器（D-11）。p_defamatory = 有害の確率、p_uncertain = 0
         Model("toxicity-base", "Multilingual Toxicity Base", "有害コメント分類器。toxicity ラベルの確率を「当たる」とみなす",
-              16, _toxicity("Horizon-Labs/multilingual-toxicity-base", "toxicity")),
+              16, _toxicity("Horizon-Labs/multilingual-toxicity-base", "toxicity"), device="CPU"),
         Model("xlmr-large-toxicity", "XLM-R Large Toxicity Classifier", "有害コメント分類器（v2）。toxic の確率を「当たる」とみなす",
-              16, _toxicity("textdetox/xlmr-large-toxicity-classifier-v2", "toxic")),
+              16, _toxicity("textdetox/xlmr-large-toxicity-classifier-v2", "toxic"), device="CPU"),
         Model("distilbert-toxicity", "DistilBERT Multilingual Toxicity Classifier",
               "有害コメント分類器。toxic の確率を「当たる」とみなす", 16,
-              _toxicity("gravitee-io/distilbert-multilingual-toxicity-classifier", "toxic")),
+              _toxicity("gravitee-io/distilbert-multilingual-toxicity-classifier", "toxic"), device="CPU"),
     ]
 }
